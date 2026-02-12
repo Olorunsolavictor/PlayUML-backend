@@ -24,6 +24,11 @@ mongoose
   .catch((err) => console.log(err));
 // Mount auth routes
 app.use("/auth", authRoutes);
+// Allow requests from your frontend
+app.use(cors({
+  origin: "http://localhost:5173", // frontend URL
+  credentials: true,               // if you use cookies/auth headers
+}));
 
 // Create a new artiste
 app.post("/artistes", async (req, res) => {
