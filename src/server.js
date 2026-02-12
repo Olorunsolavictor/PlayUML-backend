@@ -3,12 +3,18 @@ import mongoose from "mongoose";
 import dotenv from "dotenv";
 import Artiste from "./models/Artiste.js";
 import authRoutes from "./routes/authRoutes.js";
-
+import cors from "cors";
 
 dotenv.config();
 
 const app = express();
 app.use(express.json());
+
+// ⚡ Enable CORS first
+app.use(cors({
+  origin: "http://localhost:5173", // frontend URL
+  credentials: true,
+}));
 
 const PORT = process.env.PORT || 5000;
 
@@ -22,13 +28,9 @@ mongoose
   .connect(process.env.MONGO_URI)
   .then(() => console.log("MongoDB connected ✅"))
   .catch((err) => console.log(err));
-// Mount auth routes
+
+// Mount auth routes after CORS
 app.use("/auth", authRoutes);
-// Allow requests from your frontend
-app.use(cors({
-  origin: "http://localhost:5173", // frontend URL
-  credentials: true,               // if you use cookies/auth headers
-}));
 
 // Create a new artiste
 app.post("/artistes", async (req, res) => {
