@@ -1,35 +1,50 @@
 import User from "../models/User.js";
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
+import { sendEmail } from "../utils/sendEmail.js";
 
 // POST /auth/signup
 export const signup = async (req, res) => {
   try {
     const { username, email, password } = req.body;
 
-    // Check if user already exists
     const existingUser = await User.findOne({ email });
     if (existingUser)
       return res.status(400).json({ error: "User already exists" });
 
-    // Hash the password
     const salt = await bcrypt.genSalt(10);
     const hashedPassword = await bcrypt.hash(password, salt);
 
-    // Create new user
+    const verificationCode = Math.floor(
+      100000 + Math.random() * 900000,
+    ).toString();
+
     const user = new User({
       username,
       email,
       password: hashedPassword,
+      verificationCode,
+      verificationCodeExpires: Date.now() + 10 * 60 * 1000,
     });
 
     await user.save();
 
-    res.status(201).json({ message: "User created ✅", userId: user._id });
+    // Send verification email
+    await sendEmail(
+      email,
+      "Verify Your PlayUML Account",
+      `Your verification code is: ${verificationCode}`,
+    );
+
+    res.status(201).json({
+      message: "User created. Verification code sent to email 🎉",
+    });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 };
+
+
 
 // POST /auth/login
 export const login = async (req, res) => {
