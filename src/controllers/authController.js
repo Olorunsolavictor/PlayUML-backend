@@ -44,12 +44,48 @@ export const signup = async (req, res) => {
   }
 };
 
+// POST /auth/verify
+export const verifyUser = async (req, res) => {
+  try {
+    const { email, code } = req.body;
 
+    const user = await User.findOne({ email });
+
+    if (!user) return res.status(400).json({ error: "User not found" });
+
+    if (user.isVerified)
+      return res.status(400).json({ error: "User already verified" });
+
+    if (
+      user.verificationCode !== code ||
+      user.verificationCodeExpires < Date.now()
+    ) {
+      return res.status(400).json({ error: "Invalid or expired code" });
+    }
+
+    // Mark as verified
+    user.isVerified = true;
+    user.verificationCode = undefined;
+    user.verificationCodeExpires = undefined;
+
+    await user.save();
+
+    res.json({ message: "Account verified successfully ✅" });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
 
 // POST /auth/login
 export const login = async (req, res) => {
   try {
     const { email, password } = req.body;
+    // Check if verified
+    if (!user.isVerified) {
+      return res.status(403).json({
+        error: "Please verify your email before logging in",
+      });
+    }
 
     // Find user by email
     const user = await User.findOne({ email });

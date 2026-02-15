@@ -1,5 +1,5 @@
 import express from "express";
-import { signup, login } from "../controllers/authController.js";
+import { signup, login, verifyUser } from "../controllers/authController.js";
 
 const router = express.Router();
 /**
@@ -60,5 +60,7 @@ router.post("/signup", signup);
  *         description: Invalid credentials
  */
 router.post("/login", login);
+
+router.post("/verify", verifyUser);
 
 export default router;
