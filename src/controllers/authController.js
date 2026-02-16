@@ -3,7 +3,9 @@ import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
 import { sendEmail } from "../utils/sendEmail.js";
 
+
 // POST /auth/signup
+
 export const signup = async (req, res) => {
   try {
     const { username, email, password } = req.body;
@@ -16,7 +18,7 @@ export const signup = async (req, res) => {
     const hashedPassword = await bcrypt.hash(password, salt);
 
     const verificationCode = Math.floor(
-      100000 + Math.random() * 900000,
+      100000 + Math.random() * 900000
     ).toString();
 
     const user = new User({
@@ -24,46 +26,49 @@ export const signup = async (req, res) => {
       email,
       password: hashedPassword,
       verificationCode,
-      verificationCodeExpires: Date.now() + 10 * 60 * 1000,
+      verificationCodeExpires: Date.now() + 10 * 60 * 1000, // 10 minutes
     });
 
     await user.save();
 
-    // Send verification email
     await sendEmail(
       email,
       "Verify Your PlayUML Account",
-      `Your verification code is: ${verificationCode}`,
+      `Your verification code is: ${verificationCode}`
     );
 
     res.status(201).json({
       message: "User created. Verification code sent to email 🎉",
     });
+
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 };
 
-// POST /auth/verify
+
+// POST /auth/verifyUser
 export const verifyUser = async (req, res) => {
   try {
     const { email, code } = req.body;
 
-    const user = await User.findOne({ email });
+    const user = await User.findOne({ email })
+      .select("+verificationCode +verificationCodeExpires");
 
-    if (!user) return res.status(400).json({ error: "User not found" });
+    if (!user)
+      return res.status(400).json({ error: "User not found" });
 
     if (user.isVerified)
       return res.status(400).json({ error: "User already verified" });
 
     if (
+      !user.verificationCode ||
       user.verificationCode !== code ||
       user.verificationCodeExpires < Date.now()
     ) {
       return res.status(400).json({ error: "Invalid or expired code" });
     }
 
-    // Mark as verified
     user.isVerified = true;
     user.verificationCode = undefined;
     user.verificationCodeExpires = undefined;
@@ -71,37 +76,44 @@ export const verifyUser = async (req, res) => {
     await user.save();
 
     res.json({ message: "Account verified successfully ✅" });
+
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 };
 
+
+
 // POST /auth/login
 export const login = async (req, res) => {
   try {
     const { email, password } = req.body;
-    // Check if verified
+
+    const user = await User.findOne({ email })
+      .select("+password");
+
+    if (!user)
+      return res.status(400).json({ error: "User not found" });
+
     if (!user.isVerified) {
       return res.status(403).json({
         error: "Please verify your email before logging in",
       });
     }
 
-    // Find user by email
-    const user = await User.findOne({ email });
-    if (!user) return res.status(400).json({ error: "User not found" });
-
-    // Compare passwords
     const validPassword = await bcrypt.compare(password, user.password);
+
     if (!validPassword)
       return res.status(400).json({ error: "Invalid password" });
 
-    // Create JWT
-    const token = jwt.sign({ userId: user._id }, process.env.JWT_SECRET, {
-      expiresIn: "1h",
-    });
+    const token = jwt.sign(
+      { userId: user._id },
+      process.env.JWT_SECRET,
+      { expiresIn: "1h" }
+    );
 
-    res.json({ message: "Logged in ✅", token });
+    res.json({ message: "Logged in ", token });
+
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
