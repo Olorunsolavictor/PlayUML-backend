@@ -6,6 +6,7 @@ import authRoutes from "./routes/authRoutes.js";
 import cors from "cors";
 import swaggerUi from "swagger-ui-express";
 import swaggerSpec from "./config/swagger.js";
+import artisteRoutes from "./routes/artisteRoutes.js"
 
 dotenv.config();
 
@@ -36,6 +37,7 @@ app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
 // Mount auth routes after CORS
 app.use("/auth", authRoutes);
+app.use("/artistes", artisteRoutes);
 
 // Create a new artiste
 app.post("/artistes", async (req, res) => {
@@ -47,6 +49,7 @@ app.post("/artistes", async (req, res) => {
     res.status(400).json({ error: error.message });
   }
 });
+
 
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
