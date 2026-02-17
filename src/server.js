@@ -7,6 +7,8 @@ import cors from "cors";
 import swaggerUi from "swagger-ui-express";
 import swaggerSpec from "./config/swagger.js";
 import artisteRoutes from "./routes/artisteRoutes.js"
+import teamRoutes from "./routes/teamRoutes.js";
+
 
 dotenv.config();
 
@@ -49,6 +51,9 @@ app.post("/artistes", async (req, res) => {
     res.status(400).json({ error: error.message });
   }
 });
+
+app.use("/teams", teamRoutes);
+
 
 
 app.listen(PORT, () => {
