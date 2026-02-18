@@ -6,9 +6,9 @@ import authRoutes from "./routes/authRoutes.js";
 import cors from "cors";
 import swaggerUi from "swagger-ui-express";
 import swaggerSpec from "./config/swagger.js";
-import artisteRoutes from "./routes/artisteRoutes.js"
+import artisteRoutes from "./routes/artisteRoutes.js";
 import teamRoutes from "./routes/teamRoutes.js";
-
+import leaderboardRoutes from "./routes/leaderboardRoutes.js";
 
 dotenv.config();
 
@@ -53,8 +53,7 @@ app.post("/artistes", async (req, res) => {
 });
 
 app.use("/teams", teamRoutes);
-
-
+app.use("/leaderboard", leaderboardRoutes);
 
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);

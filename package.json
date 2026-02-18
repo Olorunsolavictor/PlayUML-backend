@@ -6,7 +6,9 @@
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "dev": "nodemon src/server.js",
-    "seed:artists": "node src/scripts/seedRealArtistes.js"
+    "seed:artists": "node src/scripts/seedRealArtistes.js",
+    "snapshot:daily": "node src/scripts/runDailySnapshot.js",
+    "score:daily": "node src/scripts/runDailyScoring.js"
   },
   "keywords": [],
   "author": "",
