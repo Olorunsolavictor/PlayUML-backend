@@ -8,6 +8,7 @@ import swaggerUi from "swagger-ui-express";
 import swaggerSpec from "./config/swagger.js";
 import artisteRoutes from "./routes/artisteRoutes.js";
 import teamRoutes from "./routes/teamRoutes.js";
+import userRoutes from "./routes/userRoutes.js";
 import leaderboardRoutes from "./routes/leaderboardRoutes.js";
 
 dotenv.config();
@@ -39,6 +40,7 @@ app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
 // Mount auth routes after CORS
 app.use("/auth", authRoutes);
+app.use("/users", userRoutes);
 app.use("/artistes", artisteRoutes);
 
 // Create a new artiste

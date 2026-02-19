@@ -8,7 +8,10 @@
     "dev": "nodemon src/server.js",
     "seed:artists": "node src/scripts/seedRealArtistes.js",
     "snapshot:daily": "node src/scripts/runDailySnapshot.js",
-    "score:daily": "node src/scripts/runDailyScoring.js"
+    "score:daily": "node src/scripts/runDailyScoring.js",
+    "seed:afrobeats": "node src/scripts/seedAfrobeats100.js",
+    "rebalance:coins": "node src/scripts/rebalanceCoinsPercentile.js",
+    "rebalance:coins:simple": "node src/scripts/rebalanceCoinsSimple.js"
   },
   "keywords": [],
   "author": "",

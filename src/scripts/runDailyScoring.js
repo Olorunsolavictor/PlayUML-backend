@@ -18,10 +18,10 @@ const getYesterdayKeyUTC = () => {
   return getDayKeyUTC(d);
 };
 
-// Week key like 2026-W07 (for weekly resets)
+// Week key like 2026-W08
 const getISOWeekKeyUTC = (date = new Date()) => {
   const tmp = new Date(
-    Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()),
+    Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate())
   );
   const dayNum = tmp.getUTCDay() || 7; // Mon=1..Sun=7
   tmp.setUTCDate(tmp.getUTCDate() + 4 - dayNum);
@@ -41,9 +41,10 @@ const run = async () => {
     await mongoose.connect(process.env.MONGO_URI);
     console.log("MongoDB connected ✅");
 
-    const todayKey = getDayKeyUTC();
+    const today = new Date(); // ✅ real Date object for idempotency + lastCalculatedAt
+    const todayKey = getDayKeyUTC(today);
     const yesterdayKey = getYesterdayKeyUTC();
-    const weekKey = getISOWeekKeyUTC();
+    const weekKey = getISOWeekKeyUTC(today);
 
     console.log(
       "Scoring day:",
@@ -51,12 +52,12 @@ const run = async () => {
       "yesterday:",
       yesterdayKey,
       "weekKey:",
-      weekKey,
+      weekKey
     );
 
     const teams = await Team.find({})
       .select(
-        "userId artisteIds captainId weeklyPoints seasonPoints currentWeekKey lastCalculatedAt",
+        "userId artisteIds captainId weeklyPoints seasonPoints currentWeekKey lastCalculatedAt"
       )
       .lean();
 
@@ -68,9 +69,19 @@ const run = async () => {
     let updatedTeams = 0;
 
     for (const team of teams) {
-      const artisteIds = team.artisteIds?.map(String) || [];
+      const artisteIds = (team.artisteIds || []).map(String);
       const captainId = team.captainId ? String(team.captainId) : null;
       if (artisteIds.length === 0) continue;
+
+      // ✅ idempotency: if already scored today, skip
+      const todayStr = todayKey; // already YYYY-MM-DD
+      const lastStr = team.lastCalculatedAt
+        ? getDayKeyUTC(new Date(team.lastCalculatedAt))
+        : null;
+
+      if (lastStr === todayStr) {
+        continue;
+      }
 
       // ✅ Weekly reset if new weekKey
       let weeklyPoints = team.weeklyPoints || 0;
@@ -78,7 +89,7 @@ const run = async () => {
         weeklyPoints = 0;
       }
 
-      // Fetch today/yesterday stats for all artists in the team
+      // Fetch today/yesterday stats
       const [todayStats, yestStats] = await Promise.all([
         ArtistDailyStat.find({
           artisteId: { $in: artisteIds },
@@ -90,7 +101,6 @@ const run = async () => {
         }).lean(),
       ]);
 
-      // Map stats by artisteId
       const todayMap = new Map(todayStats.map((s) => [String(s.artisteId), s]));
       const yestMap = new Map(yestStats.map((s) => [String(s.artisteId), s]));
 
@@ -101,12 +111,11 @@ const run = async () => {
           {
             $set: {
               currentWeekKey: weekKey,
-              lastCalculatedAt: new Date(), // important
+              lastCalculatedAt: today,
             },
-          },
+          }
         );
-
-        updatedTeams++; // so your log shows teams were touched
+        updatedTeams++;
         continue;
       }
 
@@ -130,19 +139,19 @@ const run = async () => {
         teamDailyPoints += pts;
       }
 
-      const seasonPoints = (team.seasonPoints || 0) + teamDailyPoints;
-      weeklyPoints = weeklyPoints + teamDailyPoints;
+      const newSeasonPoints = (team.seasonPoints || 0) + teamDailyPoints;
+      const newWeeklyPoints = weeklyPoints + teamDailyPoints;
 
       await Team.updateOne(
         { _id: team._id },
         {
           $set: {
-            weeklyPoints,
-            seasonPoints,
+            seasonPoints: newSeasonPoints,
+            weeklyPoints: newWeeklyPoints,
+            lastCalculatedAt: today,
             currentWeekKey: weekKey,
-            lastCalculatedAt: new Date(),
           },
-        },
+        }
       );
 
       updatedTeams++;
