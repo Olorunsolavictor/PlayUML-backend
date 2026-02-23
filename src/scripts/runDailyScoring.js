@@ -2,6 +2,7 @@ import mongoose from "mongoose";
 import dotenv from "dotenv";
 import Team from "../models/Team.js";
 import ArtistDailyStat from "../models/ArtistDailyStat.js";
+import TeamDailyScore from "../models/TeamDailyScore.js";
 
 dotenv.config();
 
@@ -12,8 +13,8 @@ const getDayKeyUTC = (date = new Date()) => {
   return `${y}-${m}-${d}`;
 };
 
-const getYesterdayKeyUTC = () => {
-  const d = new Date();
+const getYesterdayKeyUTC = (date = new Date()) => {
+  const d = new Date(date);
   d.setUTCDate(d.getUTCDate() - 1);
   return getDayKeyUTC(d);
 };
@@ -21,7 +22,7 @@ const getYesterdayKeyUTC = () => {
 // Week key like 2026-W08
 const getISOWeekKeyUTC = (date = new Date()) => {
   const tmp = new Date(
-    Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate())
+    Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()),
   );
   const dayNum = tmp.getUTCDay() || 7; // Mon=1..Sun=7
   tmp.setUTCDate(tmp.getUTCDate() + 4 - dayNum);
@@ -41,9 +42,9 @@ const run = async () => {
     await mongoose.connect(process.env.MONGO_URI);
     console.log("MongoDB connected ✅");
 
-    const today = new Date(); // ✅ real Date object for idempotency + lastCalculatedAt
+    const today = new Date();
     const todayKey = getDayKeyUTC(today);
-    const yesterdayKey = getYesterdayKeyUTC();
+    const yesterdayKey = getYesterdayKeyUTC(today);
     const weekKey = getISOWeekKeyUTC(today);
 
     console.log(
@@ -52,12 +53,12 @@ const run = async () => {
       "yesterday:",
       yesterdayKey,
       "weekKey:",
-      weekKey
+      weekKey,
     );
 
     const teams = await Team.find({})
       .select(
-        "userId artisteIds captainId weeklyPoints seasonPoints currentWeekKey lastCalculatedAt"
+        "userId artisteIds captainId weeklyPoints seasonPoints currentWeekKey lastCalculatedAt",
       )
       .lean();
 
@@ -67,21 +68,12 @@ const run = async () => {
     }
 
     let updatedTeams = 0;
+    let skippedAlreadyScored = 0;
 
     for (const team of teams) {
       const artisteIds = (team.artisteIds || []).map(String);
       const captainId = team.captainId ? String(team.captainId) : null;
       if (artisteIds.length === 0) continue;
-
-      // ✅ idempotency: if already scored today, skip
-      const todayStr = todayKey; // already YYYY-MM-DD
-      const lastStr = team.lastCalculatedAt
-        ? getDayKeyUTC(new Date(team.lastCalculatedAt))
-        : null;
-
-      if (lastStr === todayStr) {
-        continue;
-      }
 
       // ✅ Weekly reset if new weekKey
       let weeklyPoints = team.weeklyPoints || 0;
@@ -113,12 +105,14 @@ const run = async () => {
               currentWeekKey: weekKey,
               lastCalculatedAt: today,
             },
-          }
+          },
         );
         updatedTeams++;
         continue;
       }
 
+      // ✅ Build daily breakdown per artiste
+      const breakdown = [];
       let teamDailyPoints = 0;
 
       for (const id of artisteIds) {
@@ -131,33 +125,65 @@ const run = async () => {
 
         let pts = calcArtistPoints({ followersDelta, popularityDelta });
 
-        // Captain bonus
-        if (captainId && id === captainId) {
-          pts = Math.round(pts * 1.5);
-        }
+        const isCaptain = captainId && id === captainId;
+        if (isCaptain) pts = Math.round(pts * 1.5);
 
         teamDailyPoints += pts;
+
+        breakdown.push({
+          artisteId: id,
+          points: pts,
+          followersDelta,
+          popularityDelta,
+          isCaptain: Boolean(isCaptain),
+        });
       }
 
-      const newSeasonPoints = (team.seasonPoints || 0) + teamDailyPoints;
-      const newWeeklyPoints = weeklyPoints + teamDailyPoints;
+      // ✅ Upsert daily score doc ONCE (idempotent)
+      const upsertRes = await TeamDailyScore.updateOne(
+        { teamId: team._id, day: todayKey },
+        {
+          $setOnInsert: {
+            teamId: team._id,
+            userId: team.userId,
+            day: todayKey,
+          },
+          $set: {
+            weekKey,
+            totalPoints: teamDailyPoints,
+            breakdown,
+          },
+        },
+        { upsert: true },
+      );
 
+      // ✅ Detect if it was newly inserted
+      const insertedToday = Boolean(upsertRes.upsertedId);
+
+      if (!insertedToday) {
+        skippedAlreadyScored++;
+        continue;
+      }
+
+      // ✅ Only now update team totals (so no double-scoring)
       await Team.updateOne(
         { _id: team._id },
         {
           $set: {
-            seasonPoints: newSeasonPoints,
-            weeklyPoints: newWeeklyPoints,
+            seasonPoints: (team.seasonPoints || 0) + teamDailyPoints,
+            weeklyPoints: weeklyPoints + teamDailyPoints,
             lastCalculatedAt: today,
             currentWeekKey: weekKey,
           },
-        }
+        },
       );
 
       updatedTeams++;
     }
 
-    console.log(`Daily scoring complete ✅ Updated ${updatedTeams} teams`);
+    console.log(
+      `Daily scoring complete ✅ Updated ${updatedTeams} teams (skipped ${skippedAlreadyScored} already-scored)`,
+    );
     process.exit(0);
   } catch (err) {
     console.error("Daily scoring failed ❌", err);

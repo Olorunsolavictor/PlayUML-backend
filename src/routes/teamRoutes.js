@@ -1,6 +1,6 @@
 import express from "express";
 import { requireAuth } from "../middleware/auth.js";
-import { createTeam, getMyTeam, updateCaptain } from "../controllers/teamController.js";
+import { createTeam, getMyTeam, updateCaptain, getMyDailyBreakdown } from "../controllers/teamController.js";
 
 const router = express.Router();
 
@@ -100,5 +100,66 @@ router.get("/me", requireAuth, getMyTeam);
  *         description: No team found
  */
 router.patch("/me/captain", requireAuth, updateCaptain);
+/**
+ * @swagger
+ * /teams/me/daily:
+ *   get:
+ *     summary: Get my team's daily score breakdown
+ *     tags: [Teams]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: days
+ *         schema:
+ *           type: integer
+ *           default: 7
+ *         description: Number of recent days to return (max 60)
+ *     responses:
+ *       200:
+ *         description: Daily breakdown returned successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 teamId:
+ *                   type: string
+ *                 days:
+ *                   type: integer
+ *                 scores:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       day:
+ *                         type: string
+ *                         example: 2026-02-20
+ *                       teamPoints:
+ *                         type: number
+ *                       breakdown:
+ *                         type: array
+ *                         items:
+ *                           type: object
+ *                           properties:
+ *                             artisteId:
+ *                               type: object
+ *                               properties:
+ *                                 _id:
+ *                                   type: string
+ *                                 name:
+ *                                   type: string
+ *                                 imageUrl:
+ *                                   type: string
+ *                                 spotifyId:
+ *                                   type: string
+ *                             points:
+ *                               type: number
+ *       401:
+ *         description: Unauthorized
+ *       404:
+ *         description: No team found
+ */
+router.get("/me/daily", requireAuth, getMyDailyBreakdown);
 
 export default router;

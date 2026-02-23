@@ -55,6 +55,7 @@ app.post("/artistes", async (req, res) => {
 });
 
 app.use("/teams", teamRoutes);
+app.use("/teams/me", teamRoutes);
 app.use("/leaderboard", leaderboardRoutes);
 
 app.listen(PORT, () => {
