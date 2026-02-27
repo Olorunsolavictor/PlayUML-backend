@@ -12,8 +12,13 @@ const artistDailyStatSchema = new mongoose.Schema(
     // store day as YYYY-MM-DD string (easy + timezone-safe)
     day: { type: String, required: true, index: true },
 
+    // Spotify metrics (kept for compatibility)
     popularity: { type: Number, required: true },
     followers: { type: Number, required: true },
+
+    // YouTube metrics (phase 1 scoring source)
+    youtubeSubscribers: { type: Number, default: 0, min: 0 },
+    youtubeViews: { type: Number, default: 0, min: 0 },
   },
   { timestamps: true },
 );

@@ -31,10 +31,42 @@ const getISOWeekKeyUTC = (date = new Date()) => {
   return `${tmp.getUTCFullYear()}-W${String(weekNo).padStart(2, "0")}`;
 };
 
-const calcArtistPoints = ({ followersDelta, popularityDelta }) => {
-  const followerPts = Math.floor(followersDelta / 1000);
-  const popPts = popularityDelta * 2;
-  return followerPts + popPts;
+const SCORE_WEIGHTS = {
+  youtube: Number(process.env.YOUTUBE_WEIGHT ?? 1),
+  apple: Number(process.env.APPLE_WEIGHT ?? 0),
+  audiomack: Number(process.env.AUDIOMACK_WEIGHT ?? 0),
+};
+
+const calcYouTubeScore = ({ subscriberDelta, viewsDelta }) => {
+  const subScore = Math.floor(subscriberDelta / 200);
+  const viewsScore = Math.floor(viewsDelta / 50000);
+  return subScore + viewsScore;
+};
+
+// Phase 2 placeholder
+const calcAppleScore = () => {
+  return 0;
+};
+
+// Phase 3 placeholder
+const calcAudiomackScore = () => {
+  return 0;
+};
+
+const calcTotalScore = ({ youtubeScore, appleScore, audiomackScore }) => {
+  return (
+    SCORE_WEIGHTS.youtube * youtubeScore +
+    SCORE_WEIGHTS.apple * appleScore +
+    SCORE_WEIGHTS.audiomack * audiomackScore
+  );
+};
+
+const hasYouTubeSnapshot = (stat) => {
+  if (!stat) return false;
+  return (
+    Object.prototype.hasOwnProperty.call(stat, "youtubeSubscribers") &&
+    Object.prototype.hasOwnProperty.call(stat, "youtubeViews")
+  );
 };
 
 const run = async () => {
@@ -54,6 +86,12 @@ const run = async () => {
       yesterdayKey,
       "weekKey:",
       weekKey,
+    );
+    console.log(
+      "Weights:",
+      `youtube=${SCORE_WEIGHTS.youtube}`,
+      `apple=${SCORE_WEIGHTS.apple}`,
+      `audiomack=${SCORE_WEIGHTS.audiomack}`,
     );
 
     const teams = await Team.find({})
@@ -122,8 +160,27 @@ const run = async () => {
 
         const followersDelta = (t.followers || 0) - (y.followers || 0);
         const popularityDelta = (t.popularity || 0) - (y.popularity || 0);
+        const canScoreYouTube =
+          hasYouTubeSnapshot(t) && hasYouTubeSnapshot(y);
+        const subscriberDelta = canScoreYouTube
+          ? (t.youtubeSubscribers || 0) - (y.youtubeSubscribers || 0)
+          : 0;
+        const viewsDelta = canScoreYouTube
+          ? (t.youtubeViews || 0) - (y.youtubeViews || 0)
+          : 0;
 
-        let pts = calcArtistPoints({ followersDelta, popularityDelta });
+        const youtubeScore = canScoreYouTube
+          ? calcYouTubeScore({ subscriberDelta, viewsDelta })
+          : 0;
+        const appleScore = calcAppleScore();
+        const audiomackScore = calcAudiomackScore();
+        const rawTotal = calcTotalScore({
+          youtubeScore,
+          appleScore,
+          audiomackScore,
+        });
+
+        let pts = rawTotal;
 
         const isCaptain = captainId && id === captainId;
         if (isCaptain) pts = Math.round(pts * 1.5);
@@ -133,6 +190,13 @@ const run = async () => {
         breakdown.push({
           artisteId: id,
           points: pts,
+          rawPoints: rawTotal,
+          youtubeScore,
+          appleScore,
+          audiomackScore,
+          weightedPoints: rawTotal,
+          subscriberDelta,
+          viewsDelta,
           followersDelta,
           popularityDelta,
           isCaptain: Boolean(isCaptain),

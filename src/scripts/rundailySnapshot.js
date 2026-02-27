@@ -3,6 +3,7 @@ import dotenv from "dotenv";
 import Artiste from "../models/Artiste.js";
 import ArtistDailyStat from "../models/ArtistDailyStat.js";
 import { getMultipleArtistsFromSpotify } from "../services/spotifyService.js";
+import { getMultipleChannelsFromYouTube } from "../services/youtubeService.js";
 
 dotenv.config();
 
@@ -28,47 +29,87 @@ const run = async () => {
     const day = getDayKeyUTC();
     console.log("Snapshot day:", day);
 
-    const artistes = await Artiste.find({ isActive: true }).select("_id spotifyId name");
+    const artistes = await Artiste.find({ isActive: true }).select(
+      "_id spotifyId youtubeChannelId name",
+    );
     if (artistes.length === 0) {
       console.log("No artistes found. Exiting.");
       process.exit(0);
     }
 
-    // Spotify allows max 50 ids per request
-    const spotifyIds = artistes.map((a) => a.spotifyId);
-    const batches = chunk(spotifyIds, 50);
+    // Build Spotify stat map
+    const spotifyStatMap = new Map();
+    const spotifyIds = artistes.map((a) => a.spotifyId).filter(Boolean);
+    const spotifyBatches = chunk(spotifyIds, 50);
 
-    // map spotifyId -> artisteId
-    const map = new Map(artistes.map((a) => [a.spotifyId, a._id]));
+    for (const ids of spotifyBatches) {
+      const spotifyArtists = await getMultipleArtistsFromSpotify(ids);
+      for (const sa of spotifyArtists) {
+        spotifyStatMap.set(sa.id, {
+          popularity: sa.popularity ?? 0,
+          followers: sa.followers?.total ?? 0,
+        });
+      }
+    }
+
+    // Build YouTube stat map
+    const youtubeStatMap = new Map();
+    const youtubeChannelIds = artistes
+      .map((a) => a.youtubeChannelId)
+      .filter(Boolean);
+
+    if (youtubeChannelIds.length > 0) {
+      try {
+        const youtubeBatches = chunk(youtubeChannelIds, 50);
+        for (const ids of youtubeBatches) {
+          const channels = await getMultipleChannelsFromYouTube(ids);
+          for (const channel of channels) {
+            youtubeStatMap.set(channel.id, {
+              youtubeSubscribers: Number(
+                channel.statistics?.subscriberCount || 0,
+              ),
+              youtubeViews: Number(channel.statistics?.viewCount || 0),
+            });
+          }
+        }
+      } catch (err) {
+        console.warn("YouTube snapshot skipped:", err.message);
+      }
+    }
+
+    // Upsert one stat row per artiste/day
+    const ops = artistes.map((a) => {
+      const spotify = spotifyStatMap.get(a.spotifyId) || {
+        popularity: 0,
+        followers: 0,
+      };
+      const youtube = a.youtubeChannelId
+        ? youtubeStatMap.get(a.youtubeChannelId) || {
+            youtubeSubscribers: 0,
+            youtubeViews: 0,
+          }
+        : { youtubeSubscribers: 0, youtubeViews: 0 };
+
+      return {
+        updateOne: {
+          filter: { artisteId: a._id, day },
+          update: {
+            $set: {
+              popularity: spotify.popularity,
+              followers: spotify.followers,
+              youtubeSubscribers: youtube.youtubeSubscribers,
+              youtubeViews: youtube.youtubeViews,
+            },
+          },
+          upsert: true,
+        },
+      };
+    });
 
     let savedCount = 0;
-
-    for (const ids of batches) {
-      const spotifyArtists = await getMultipleArtistsFromSpotify(ids);
-
-      // Build bulk operations
-      const ops = spotifyArtists.map((sa) => {
-        const artisteId = map.get(sa.id);
-        if (!artisteId) return null;
-
-        return {
-          updateOne: {
-            filter: { artisteId, day },
-            update: {
-              $set: {
-                popularity: sa.popularity ?? 0,
-                followers: sa.followers?.total ?? 0,
-              },
-            },
-            upsert: true,
-          },
-        };
-      }).filter(Boolean);
-
-      if (ops.length > 0) {
-        const res = await ArtistDailyStat.bulkWrite(ops, { ordered: false });
-        savedCount += (res.upsertedCount || 0) + (res.modifiedCount || 0);
-      }
+    if (ops.length > 0) {
+      const res = await ArtistDailyStat.bulkWrite(ops, { ordered: false });
+      savedCount = (res.upsertedCount || 0) + (res.modifiedCount || 0);
     }
 
     console.log(`Daily snapshot saved/updated (${savedCount} records touched)`);

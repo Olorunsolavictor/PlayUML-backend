@@ -4,6 +4,13 @@ const artisteSchema = new mongoose.Schema(
   {
     name: { type: String, required: true, trim: true },
     spotifyId: { type: String, required: true, unique: true, index: true },
+    youtubeChannelId: {
+      type: String,
+      default: null,
+      index: true,
+      sparse: true,
+      trim: true,
+    },
 
     coinValue: { type: Number, required: true, min: 0 },
 

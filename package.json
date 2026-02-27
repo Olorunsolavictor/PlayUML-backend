@@ -7,6 +7,7 @@
     "test": "echo \"Error: no test specified\" && exit 1",
     "dev": "nodemon src/server.js",
     "seed:artists": "node src/scripts/seedRealArtistes.js",
+    "seed:youtube": "node src/scripts/seedYoutubeChannels.js",
     "snapshot:daily": "node src/scripts/runDailySnapshot.js",
     "score:daily": "node src/scripts/runDailyScoring.js",
     "seed:afrobeats": "node src/scripts/seedAfrobeats100.js",
