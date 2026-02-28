@@ -16,13 +16,42 @@ dotenv.config();
 const app = express();
 app.use(express.json());
 
-// ⚡ Enable CORS first
-app.use(
-  cors({
-    origin: "http://localhost:5173", // frontend URL
-    credentials: true,
-  }),
-);
+const allowedOrigins = (
+  process.env.CORS_ORIGINS || "http://localhost:5173"
+)
+  .split(",")
+  .map((origin) => origin.trim().replace(/\/$/, ""))
+  .filter(Boolean);
+
+const allowedOriginRegex = (process.env.CORS_ORIGIN_REGEX || "")
+  .split(",")
+  .map((value) => value.trim())
+  .filter(Boolean)
+  .map((pattern) => new RegExp(pattern));
+
+const corsOptions = {
+  origin(origin, callback) {
+    // Allow non-browser tools (curl/postman/server-to-server)
+    if (!origin) return callback(null, true);
+
+    const normalizedOrigin = origin.replace(/\/$/, "");
+    const isAllowedExact = allowedOrigins.includes(normalizedOrigin);
+    const isAllowedByRegex = allowedOriginRegex.some((regex) =>
+      regex.test(normalizedOrigin),
+    );
+
+    if (isAllowedExact || isAllowedByRegex) {
+      return callback(null, true);
+    }
+
+    return callback(new Error(`CORS blocked for origin: ${origin}`));
+  },
+  credentials: true,
+};
+
+// Enable CORS before routes
+app.use(cors(corsOptions));
+app.options(/.*/, cors(corsOptions));
 
 const PORT = process.env.PORT || 5000;
 

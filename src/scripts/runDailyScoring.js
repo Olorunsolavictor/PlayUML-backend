@@ -31,10 +31,41 @@ const getISOWeekKeyUTC = (date = new Date()) => {
   return `${tmp.getUTCFullYear()}-W${String(weekNo).padStart(2, "0")}`;
 };
 
-const calcArtistPoints = ({ followersDelta, popularityDelta }) => {
-  const followerPts = Math.floor(followersDelta / 1000);
-  const popPts = popularityDelta * 2;
-  return followerPts + popPts;
+const SCORE_MULTIPLIER = Number(process.env.SCORE_MULTIPLIER ?? 1);
+
+const YOUTUBE_SUBSCRIBER_DIVISOR = Number(process.env.YOUTUBE_SUBSCRIBER_DIVISOR ?? 1000);
+const YOUTUBE_VIEWS_DIVISOR = Number(process.env.YOUTUBE_VIEWS_DIVISOR ?? 100000);
+const LASTFM_LISTENERS_DIVISOR = Number(process.env.LASTFM_LISTENERS_DIVISOR ?? 1000);
+const LASTFM_PLAYCOUNT_DIVISOR = Number(process.env.LASTFM_PLAYCOUNT_DIVISOR ?? 100000);
+const ARTIST_DAILY_CAP = Number(process.env.ARTIST_DAILY_CAP ?? 25);
+
+const clamp = (n, min, max) => Math.max(min, Math.min(max, n));
+const round2 = (n) => Number(n.toFixed(2));
+
+// Phase 2 placeholder
+const calcAppleScore = () => {
+  return 0;
+};
+
+// Phase 3 placeholder
+const calcAudiomackScore = () => {
+  return 0;
+};
+
+const hasYouTubeSnapshot = (stat) => {
+  if (!stat) return false;
+  return (
+    Object.prototype.hasOwnProperty.call(stat, "youtubeSubscribers") &&
+    Object.prototype.hasOwnProperty.call(stat, "youtubeViews")
+  );
+};
+
+const hasLastfmSnapshot = (stat) => {
+  if (!stat) return false;
+  return (
+    Object.prototype.hasOwnProperty.call(stat, "lastfmListeners") &&
+    Object.prototype.hasOwnProperty.call(stat, "lastfmPlaycount")
+  );
 };
 
 const run = async () => {
@@ -55,6 +86,14 @@ const run = async () => {
       "weekKey:",
       weekKey,
     );
+    console.log(
+      "Delta divisors:",
+      `subscribers=${YOUTUBE_SUBSCRIBER_DIVISOR}`,
+      `views=${YOUTUBE_VIEWS_DIVISOR}`,
+      `listeners=${LASTFM_LISTENERS_DIVISOR}`,
+      `playcount=${LASTFM_PLAYCOUNT_DIVISOR}`,
+    );
+    console.log("Per-artiste daily cap:", ARTIST_DAILY_CAP);
 
     const teams = await Team.find({})
       .select(
@@ -122,17 +161,57 @@ const run = async () => {
 
         const followersDelta = (t.followers || 0) - (y.followers || 0);
         const popularityDelta = (t.popularity || 0) - (y.popularity || 0);
+        const canScoreLastfm = hasLastfmSnapshot(t) && hasLastfmSnapshot(y);
+        const listenerDelta = canScoreLastfm
+          ? (t.lastfmListeners || 0) - (y.lastfmListeners || 0)
+          : 0;
+        const playcountDelta = canScoreLastfm
+          ? (t.lastfmPlaycount || 0) - (y.lastfmPlaycount || 0)
+          : 0;
+        const canScoreYouTube =
+          hasYouTubeSnapshot(t) && hasYouTubeSnapshot(y);
+        const subscriberDelta = canScoreYouTube
+          ? (t.youtubeSubscribers || 0) - (y.youtubeSubscribers || 0)
+          : 0;
+        const viewsDelta = canScoreYouTube
+          ? (t.youtubeViews || 0) - (y.youtubeViews || 0)
+          : 0;
 
-        let pts = calcArtistPoints({ followersDelta, popularityDelta });
+        const lastfmScore = canScoreLastfm
+          ? listenerDelta / LASTFM_LISTENERS_DIVISOR +
+            playcountDelta / LASTFM_PLAYCOUNT_DIVISOR
+          : 0;
+        const youtubeScore = canScoreYouTube
+          ? subscriberDelta / YOUTUBE_SUBSCRIBER_DIVISOR +
+            viewsDelta / YOUTUBE_VIEWS_DIVISOR
+          : 0;
+        const appleScore = calcAppleScore();
+        const audiomackScore = calcAudiomackScore();
+
+        const rawTotal = lastfmScore + youtubeScore;
+        const bounded = clamp(rawTotal, 0, ARTIST_DAILY_CAP);
+        const scaledTotal = round2(bounded * SCORE_MULTIPLIER);
+
+        let pts = scaledTotal;
 
         const isCaptain = captainId && id === captainId;
-        if (isCaptain) pts = Math.round(pts * 1.5);
+        if (isCaptain) pts = round2(pts * 1.5);
 
-        teamDailyPoints += pts;
+        teamDailyPoints = round2(teamDailyPoints + pts);
 
         breakdown.push({
           artisteId: id,
-          points: pts,
+          points: round2(pts),
+          rawPoints: round2(rawTotal),
+          lastfmScore: round2(lastfmScore),
+          youtubeScore: round2(youtubeScore),
+          appleScore,
+          audiomackScore,
+          weightedPoints: scaledTotal,
+          listenerDelta,
+          playcountDelta,
+          subscriberDelta,
+          viewsDelta,
           followersDelta,
           popularityDelta,
           isCaptain: Boolean(isCaptain),

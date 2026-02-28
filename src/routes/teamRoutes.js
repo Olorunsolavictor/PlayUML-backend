@@ -155,6 +155,28 @@ router.patch("/me/captain", requireAuth, updateCaptain);
  *                                   type: string
  *                             points:
  *                               type: number
+ *                             rawPoints:
+ *                               type: number
+ *                             weightedPoints:
+ *                               type: number
+ *                             lastfmScore:
+ *                               type: number
+ *                             youtubeScore:
+ *                               type: number
+ *                             listenerDelta:
+ *                               type: number
+ *                             playcountDelta:
+ *                               type: number
+ *                             subscriberDelta:
+ *                               type: number
+ *                             viewsDelta:
+ *                               type: number
+ *                             followersDelta:
+ *                               type: number
+ *                             popularityDelta:
+ *                               type: number
+ *                             isCaptain:
+ *                               type: boolean
  *       401:
  *         description: Unauthorized
  *       404:
