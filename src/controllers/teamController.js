@@ -148,7 +148,34 @@ export const getMyDailyBreakdown = async (req, res) => {
       )
       .lean();
 
-    return res.json({ teamId: team._id, days, scores });
+    const normalizedScores = scores.map((score) => {
+      const normalizedBreakdown = (score.breakdown || []).map((item) => ({
+        ...item,
+        points: Number(item.points || 0),
+        rawPoints: Number(item.rawPoints || 0),
+        weightedPoints: Number(item.weightedPoints || 0),
+        lastfmScore: Number(item.lastfmScore || 0),
+        youtubeScore: Number(item.youtubeScore || 0),
+        appleScore: Number(item.appleScore || 0),
+        audiomackScore: Number(item.audiomackScore || 0),
+        listenerDelta: Number(item.listenerDelta || 0),
+        playcountDelta: Number(item.playcountDelta || 0),
+        subscriberDelta: Number(item.subscriberDelta || 0),
+        viewsDelta: Number(item.viewsDelta || 0),
+        followersDelta: Number(item.followersDelta || 0),
+        popularityDelta: Number(item.popularityDelta || 0),
+        isCaptain: Boolean(item.isCaptain),
+      }));
+
+      return {
+        ...score,
+        teamPoints: Number(score.totalPoints || 0),
+        totalPoints: Number(score.totalPoints || 0),
+        breakdown: normalizedBreakdown,
+      };
+    });
+
+    return res.json({ teamId: team._id, days, scores: normalizedScores });
   } catch (err) {
     return res.status(500).json({ error: err.message });
   }

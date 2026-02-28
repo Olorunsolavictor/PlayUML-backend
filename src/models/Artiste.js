@@ -11,6 +11,11 @@ const artisteSchema = new mongoose.Schema(
       sparse: true,
       trim: true,
     },
+    lastfmArtistName: {
+      type: String,
+      default: null,
+      trim: true,
+    },
 
     coinValue: { type: Number, required: true, min: 0 },
 

@@ -20,13 +20,21 @@ JWT_SECRET=your_jwt_secret
 SPOTIFY_CLIENT_ID=your_spotify_client_id
 SPOTIFY_CLIENT_SECRET=your_spotify_client_secret
 YOUTUBE_API_KEY=your_youtube_data_api_key
+LASTFM_API_KEY=your_lastfm_api_key
 
 SENDGRID_API_KEY=your_sendgrid_api_key
 FROM_EMAIL=your_verified_sender_email
 
-YOUTUBE_WEIGHT=1
-APPLE_WEIGHT=0
-AUDIOMACK_WEIGHT=0
+SCORE_MULTIPLIER=1
+ARTIST_DAILY_CAP=25
+LASTFM_LISTENERS_DIVISOR=1000
+LASTFM_PLAYCOUNT_DIVISOR=100000
+YOUTUBE_SUBSCRIBER_DIVISOR=1000
+YOUTUBE_VIEWS_DIVISOR=100000
+
+# optional: coin rebalance source weights (defaults to LASTFM_WEIGHT / YOUTUBE_WEIGHT)
+COIN_LASTFM_WEIGHT=0.7
+COIN_YOUTUBE_WEIGHT=0.3
 ```
 
 ## Install and Run
@@ -64,11 +72,14 @@ Swagger UI is available at:
 - `npm run score:daily` - Compute daily team scores and leaderboard totals
 - `npm run rebalance:coins` - Rebalance coins (percentile strategy)
 - `npm run rebalance:coins:simple` - Rebalance coins (simple strategy)
+- `npm run reset:scoring` - Reset all team scoring totals and daily score history
 
 ## Scoring (Current Phase)
-- `youtubeScore = floor(subscriberDelta / 200) + floor(viewsDelta / 50000)`
-- `appleScore` and `audiomackScore` are placeholders (currently `0`)
-- `totalScore = youtubeWeight * youtubeScore + appleWeight * appleScore + audiomackWeight * audiomackScore`
+- `lastfmScore = (listenerDelta / LASTFM_LISTENERS_DIVISOR) + (playcountDelta / LASTFM_PLAYCOUNT_DIVISOR)`
+- `youtubeScore = (subscriberDelta / YOUTUBE_SUBSCRIBER_DIVISOR) + (viewsDelta / YOUTUBE_VIEWS_DIVISOR)`
+- `artistRawScore = lastfmScore + youtubeScore`
+- `artistScore = clamp(artistRawScore, 0, ARTIST_DAILY_CAP) * SCORE_MULTIPLIER`
+- `captainScore = round(artistScore * 1.5)` for captain only
 
 ## YouTube Data Notes
 - Daily snapshots now also read YouTube channel statistics via YouTube Data API v3.

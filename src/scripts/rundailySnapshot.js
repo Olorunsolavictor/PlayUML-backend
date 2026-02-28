@@ -4,6 +4,7 @@ import Artiste from "../models/Artiste.js";
 import ArtistDailyStat from "../models/ArtistDailyStat.js";
 import { getMultipleArtistsFromSpotify } from "../services/spotifyService.js";
 import { getMultipleChannelsFromYouTube } from "../services/youtubeService.js";
+import { getArtistStatsFromLastFm } from "../services/lastfmService.js";
 
 dotenv.config();
 
@@ -30,7 +31,7 @@ const run = async () => {
     console.log("Snapshot day:", day);
 
     const artistes = await Artiste.find({ isActive: true }).select(
-      "_id spotifyId youtubeChannelId name",
+      "_id spotifyId youtubeChannelId lastfmArtistName name",
     );
     if (artistes.length === 0) {
       console.log("No artistes found. Exiting.");
@@ -77,6 +78,42 @@ const run = async () => {
       }
     }
 
+    // Build Last.fm stat map
+    const lastfmStatMap = new Map();
+    try {
+      const batches = chunk(artistes, 10);
+      for (const batch of batches) {
+        const results = await Promise.all(
+          batch.map(async (a) => {
+            try {
+              const queryName = a.lastfmArtistName || a.name;
+              const stats = await getArtistStatsFromLastFm({
+                artistName: queryName,
+              });
+              return {
+                artisteId: String(a._id),
+                stats: stats || { listeners: 0, playcount: 0 },
+              };
+            } catch {
+              return {
+                artisteId: String(a._id),
+                stats: { listeners: 0, playcount: 0 },
+              };
+            }
+          }),
+        );
+
+        for (const row of results) {
+          lastfmStatMap.set(row.artisteId, {
+            lastfmListeners: Number(row.stats.listeners || 0),
+            lastfmPlaycount: Number(row.stats.playcount || 0),
+          });
+        }
+      }
+    } catch (err) {
+      console.warn("Last.fm snapshot skipped:", err.message);
+    }
+
     // Upsert one stat row per artiste/day
     const ops = artistes.map((a) => {
       const spotify = spotifyStatMap.get(a.spotifyId) || {
@@ -89,6 +126,10 @@ const run = async () => {
             youtubeViews: 0,
           }
         : { youtubeSubscribers: 0, youtubeViews: 0 };
+      const lastfm = lastfmStatMap.get(String(a._id)) || {
+        lastfmListeners: 0,
+        lastfmPlaycount: 0,
+      };
 
       return {
         updateOne: {
@@ -99,6 +140,8 @@ const run = async () => {
               followers: spotify.followers,
               youtubeSubscribers: youtube.youtubeSubscribers,
               youtubeViews: youtube.youtubeViews,
+              lastfmListeners: lastfm.lastfmListeners,
+              lastfmPlaycount: lastfm.lastfmPlaycount,
             },
           },
           upsert: true,

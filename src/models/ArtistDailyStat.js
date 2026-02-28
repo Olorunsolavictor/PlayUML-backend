@@ -19,6 +19,10 @@ const artistDailyStatSchema = new mongoose.Schema(
     // YouTube metrics (phase 1 scoring source)
     youtubeSubscribers: { type: Number, default: 0, min: 0 },
     youtubeViews: { type: Number, default: 0, min: 0 },
+
+    // Last.fm metrics (music-native source)
+    lastfmListeners: { type: Number, default: 0, min: 0 },
+    lastfmPlaycount: { type: Number, default: 0, min: 0 },
   },
   { timestamps: true },
 );
