@@ -138,6 +138,7 @@ const run = async () => {
             $set: {
               popularity: spotify.popularity,
               followers: spotify.followers,
+              coinValue: Number(a.coinValue || 0),
               youtubeSubscribers: youtube.youtubeSubscribers,
               youtubeViews: youtube.youtubeViews,
               lastfmListeners: lastfm.lastfmListeners,

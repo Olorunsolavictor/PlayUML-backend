@@ -168,6 +168,7 @@ router.get("/", async (req, res) => {
               youtubeViews: "$youtubeViews",
               lastfmListeners: "$lastfmListeners",
               lastfmPlaycount: "$lastfmPlaycount",
+              coinValue: "$coinValue",
             },
           },
         },
@@ -190,6 +191,8 @@ router.get("/", async (req, res) => {
           youtubeViews: Number(latest.youtubeViews || 0),
           lastfmListeners: Number(latest.lastfmListeners || 0),
           lastfmPlaycount: Number(latest.lastfmPlaycount || 0),
+          coinValueDelta:
+            Number(latest.coinValue || 0) - Number(prev.coinValue || 0),
 
           youtubeSubscribersDelta: Number(latest.youtubeSubscribers || 0) - Number(prev.youtubeSubscribers || 0),
           youtubeViewsDelta: Number(latest.youtubeViews || 0) - Number(prev.youtubeViews || 0),
@@ -208,6 +211,7 @@ router.get("/", async (req, res) => {
         youtubeViews: 0,
         lastfmListeners: 0,
         lastfmPlaycount: 0,
+        coinValueDelta: 0,
         youtubeSubscribersDelta: 0,
         youtubeViewsDelta: 0,
         lastfmListenersDelta: 0,
