@@ -10,11 +10,20 @@ import artisteRoutes from "./routes/artisteRoutes.js";
 import teamRoutes from "./routes/teamRoutes.js";
 import userRoutes from "./routes/userRoutes.js";
 import leaderboardRoutes from "./routes/leaderboardRoutes.js";
+import { requireAdminKey } from "./middleware/admin.js";
 
 dotenv.config();
 
 const app = express();
-app.use(express.json());
+app.disable("x-powered-by");
+app.set("trust proxy", 1);
+app.use(express.json({ limit: "200kb" }));
+app.use((req, res, next) => {
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("X-Frame-Options", "DENY");
+  res.setHeader("Referrer-Policy", "no-referrer");
+  next();
+});
 
 const allowedOrigins = (
   process.env.CORS_ORIGINS || "http://localhost:5173"
@@ -65,7 +74,9 @@ mongoose
   .connect(process.env.MONGO_URI)
   .then(() => console.log("MongoDB connected ✅"))
   .catch((err) => console.log(err));
-app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
+if (process.env.SWAGGER_ENABLED === "true") {
+  app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
+}
 
 // Mount auth routes after CORS
 app.use("/auth", authRoutes);
@@ -73,13 +84,14 @@ app.use("/users", userRoutes);
 app.use("/artistes", artisteRoutes);
 
 // Create a new artiste
-app.post("/artistes", async (req, res) => {
+app.post("/artistes", requireAdminKey, async (req, res) => {
   try {
     const artiste = new Artiste(req.body);
     const savedArtiste = await artiste.save();
     res.status(201).json(savedArtiste);
   } catch (error) {
-    res.status(400).json({ error: error.message });
+    console.error("create artiste failed", error);
+    res.status(400).json({ error: "Invalid artiste payload" });
   }
 });
 

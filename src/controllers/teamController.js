@@ -73,7 +73,8 @@ export const createTeam = async (req, res) => {
       coinsUsed,
     });
   } catch (err) {
-    return res.status(500).json({ error: err.message });
+    console.error("createTeam failed", err);
+    return res.status(500).json({ error: "Internal server error" });
   }
 };
 
@@ -92,7 +93,8 @@ export const getMyTeam = async (req, res) => {
 
     return res.json(team);
   } catch (err) {
-    return res.status(500).json({ error: err.message });
+    console.error("getMyTeam failed", err);
+    return res.status(500).json({ error: "Internal server error" });
   }
 };
 
@@ -126,7 +128,8 @@ export const updateCaptain = async (req, res) => {
 
     return res.json({ message: "Captain updated ✅", team });
   } catch (err) {
-    return res.status(500).json({ error: err.message });
+    console.error("updateCaptain failed", err);
+    return res.status(500).json({ error: "Internal server error" });
   }
 };
 
@@ -177,6 +180,7 @@ export const getMyDailyBreakdown = async (req, res) => {
 
     return res.json({ teamId: team._id, days, scores: normalizedScores });
   } catch (err) {
-    return res.status(500).json({ error: err.message });
+    console.error("getMyDailyBreakdown failed", err);
+    return res.status(500).json({ error: "Internal server error" });
   }
 };

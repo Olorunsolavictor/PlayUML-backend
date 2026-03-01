@@ -1,7 +1,7 @@
 import Team from "../models/Team.js";
 import TeamDailyScore from "../models/TeamDailyScore.js";
 
-const safeUserSelect = "username email"; // adjust if you want only username
+const safeUserSelect = "username";
 
 const getTodayAndYesterday = () => {
   const now = new Date();
@@ -78,7 +78,8 @@ export const getWeeklyLeaderboard = async (req, res) => {
     });
 
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error("getWeeklyLeaderboard failed", err);
+    res.status(500).json({ error: "Internal server error" });
   }
 };
 
@@ -109,6 +110,7 @@ export const getSeasonLeaderboard = async (req, res) => {
 
     res.json({ teams: withDailyMetrics });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error("getSeasonLeaderboard failed", err);
+    res.status(500).json({ error: "Internal server error" });
   }
 };

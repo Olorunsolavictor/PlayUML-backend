@@ -14,6 +14,7 @@ export const getMe = async (req, res) => {
 
     res.json({ user });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error("getMe failed", err);
+    res.status(500).json({ error: "Internal server error" });
   }
 };

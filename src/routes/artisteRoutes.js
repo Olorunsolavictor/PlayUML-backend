@@ -7,6 +7,8 @@
 
 import express from "express";
 import Artiste from "../models/Artiste.js";
+import ArtistDailyStat from "../models/ArtistDailyStat.js";
+import { requireAdminKey } from "../middleware/admin.js";
 
 const router = express.Router();
 
@@ -30,7 +32,7 @@ const router = express.Router();
  *       500:
  *         description: Server error
  */
-router.post("/seed", async (req, res) => {
+router.post("/seed", requireAdminKey, async (req, res) => {
   try {
     // 50 sample artistes (replace spotifyId later with real ones)
     const seed = Array.from({ length: 50 }).map((_, i) => ({
@@ -62,7 +64,8 @@ router.post("/seed", async (req, res) => {
       .status(201)
       .json({ message: "Seeded artistes ✅", inserted: toInsert.length });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error("artiste seed failed", err);
+    res.status(500).json({ error: "Internal server error" });
   }
 });
 
@@ -132,6 +135,9 @@ router.get("/", async (req, res) => {
   try {
     const limit = Math.min(parseInt(req.query.limit || "50", 10), 100);
     const search = (req.query.search || "").toString().trim();
+    const includeMetrics =
+      (req.query.includeMetrics || "").toString().toLowerCase() === "true" ||
+      req.query.includeMetrics === "1";
 
     const filter = { isActive: true };
 
@@ -143,9 +149,81 @@ router.get("/", async (req, res) => {
       .sort({ popularity: -1 })
       .limit(limit);
 
-    res.json(artistes);
+    if (!includeMetrics || artistes.length === 0) {
+      return res.json(artistes);
+    }
+
+    const artisteIds = artistes.map((a) => a._id);
+
+    const latestStats = await ArtistDailyStat.aggregate([
+      { $match: { artisteId: { $in: artisteIds } } },
+      { $sort: { artisteId: 1, day: -1 } },
+      {
+        $group: {
+          _id: "$artisteId",
+          stats: {
+            $push: {
+              day: "$day",
+              youtubeSubscribers: "$youtubeSubscribers",
+              youtubeViews: "$youtubeViews",
+              lastfmListeners: "$lastfmListeners",
+              lastfmPlaycount: "$lastfmPlaycount",
+            },
+          },
+        },
+      },
+      {
+        $project: {
+          latest: { $arrayElemAt: ["$stats", 0] },
+          prev: { $arrayElemAt: ["$stats", 1] },
+        },
+      },
+    ]);
+
+    const statMap = new Map(
+      latestStats.map((row) => {
+        const latest = row.latest || {};
+        const prev = row.prev || {};
+
+        const metrics = {
+          youtubeSubscribers: Number(latest.youtubeSubscribers || 0),
+          youtubeViews: Number(latest.youtubeViews || 0),
+          lastfmListeners: Number(latest.lastfmListeners || 0),
+          lastfmPlaycount: Number(latest.lastfmPlaycount || 0),
+
+          youtubeSubscribersDelta: Number(latest.youtubeSubscribers || 0) - Number(prev.youtubeSubscribers || 0),
+          youtubeViewsDelta: Number(latest.youtubeViews || 0) - Number(prev.youtubeViews || 0),
+          lastfmListenersDelta: Number(latest.lastfmListeners || 0) - Number(prev.lastfmListeners || 0),
+          lastfmPlaycountDelta: Number(latest.lastfmPlaycount || 0) - Number(prev.lastfmPlaycount || 0),
+        };
+
+        return [String(row._id), metrics];
+      }),
+    );
+
+    const enriched = artistes.map((artiste) => {
+      const base = artiste.toObject();
+      const metrics = statMap.get(String(artiste._id)) || {
+        youtubeSubscribers: 0,
+        youtubeViews: 0,
+        lastfmListeners: 0,
+        lastfmPlaycount: 0,
+        youtubeSubscribersDelta: 0,
+        youtubeViewsDelta: 0,
+        lastfmListenersDelta: 0,
+        lastfmPlaycountDelta: 0,
+      };
+
+      return {
+        ...base,
+        ...metrics,
+      };
+    });
+
+    res.json(enriched);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error("artiste list failed", err);
+    res.status(500).json({ error: "Internal server error" });
   }
 });
 

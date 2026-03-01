@@ -1,7 +1,23 @@
 import express from "express";
 import { signup, login, verifyUser } from "../controllers/authController.js";
+import { createIpRateLimiter } from "../middleware/rateLimit.js";
 
 const router = express.Router();
+const signupLimiter = createIpRateLimiter({
+  windowMs: 10 * 60 * 1000,
+  max: 8,
+  message: "Too many signup attempts. Please try again shortly.",
+});
+const loginLimiter = createIpRateLimiter({
+  windowMs: 10 * 60 * 1000,
+  max: 20,
+  message: "Too many login attempts. Please try again shortly.",
+});
+const verifyLimiter = createIpRateLimiter({
+  windowMs: 10 * 60 * 1000,
+  max: 15,
+  message: "Too many verification attempts. Please try again shortly.",
+});
 /**
  * @swagger
  * /auth/signup:
@@ -31,7 +47,7 @@ const router = express.Router();
  *       400:
  *         description: Bad request
  */
-router.post("/signup", signup);
+router.post("/signup", signupLimiter, signup);
 
 /**
  * @swagger
@@ -59,7 +75,7 @@ router.post("/signup", signup);
  *       401:
  *         description: Invalid credentials
  */
-router.post("/login", login);
+router.post("/login", loginLimiter, login);
 
 
 
@@ -105,6 +121,6 @@ router.post("/login", login);
  */
 
 
-router.post("/verify", verifyUser);
+router.post("/verify", verifyLimiter, verifyUser);
 
 export default router;
