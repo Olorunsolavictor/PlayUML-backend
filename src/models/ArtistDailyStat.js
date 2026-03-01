@@ -15,6 +15,7 @@ const artistDailyStatSchema = new mongoose.Schema(
     // Spotify metrics (kept for compatibility)
     popularity: { type: Number, required: true },
     followers: { type: Number, required: true },
+    coinValue: { type: Number, default: 0, min: 0 },
 
     // YouTube metrics (phase 1 scoring source)
     youtubeSubscribers: { type: Number, default: 0, min: 0 },
