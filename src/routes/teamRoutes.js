@@ -1,6 +1,12 @@
 import express from "express";
 import { requireAuth } from "../middleware/auth.js";
-import { createTeam, getMyTeam, updateCaptain, getMyDailyBreakdown } from "../controllers/teamController.js";
+import {
+  createTeam,
+  getMyTeam,
+  updateCaptain,
+  getMyDailyBreakdown,
+  swapArtiste,
+} from "../controllers/teamController.js";
 
 const router = express.Router();
 
@@ -100,6 +106,7 @@ router.get("/me", requireAuth, getMyTeam);
  *         description: No team found
  */
 router.patch("/me/captain", requireAuth, updateCaptain);
+router.patch("/me/swap", requireAuth, swapArtiste);
 /**
  * @swagger
  * /teams/me/daily:

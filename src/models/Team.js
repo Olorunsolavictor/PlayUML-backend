@@ -23,6 +23,9 @@ const teamSchema = new mongoose.Schema(
 
     // helps reset weeks automatically
     currentWeekKey: { type: String, default: null },
+    actionWeekKey: { type: String, default: null },
+    swapsUsedThisWeek: { type: Number, default: 0 },
+    captainChangesUsedThisWeek: { type: Number, default: 0 },
 
     // when last scoring was applied
     lastCalculatedAt: { type: Date, default: null },
