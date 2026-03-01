@@ -9,10 +9,16 @@ import { sendEmail } from "../utils/sendEmail.js";
 export const signup = async (req, res) => {
   try {
     const { username, email, password } = req.body;
+    if (!username || !email || !password) {
+      return res.status(400).json({ error: "Missing required fields" });
+    }
 
     const existingUser = await User.findOne({ email });
-    if (existingUser)
-      return res.status(400).json({ error: "User already exists" });
+    if (existingUser) {
+      return res.status(201).json({
+        message: "If this account can be used, verification instructions were sent.",
+      });
+    }
 
     const salt = await bcrypt.genSalt(10);
     const hashedPassword = await bcrypt.hash(password, salt);
@@ -38,11 +44,12 @@ export const signup = async (req, res) => {
     );
 
     res.status(201).json({
-      message: "User created. Verification code sent to email 🎉",
+      message: "If this account can be used, verification instructions were sent.",
     });
 
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error("signup failed", err);
+    res.status(500).json({ error: "Internal server error" });
   }
 };
 
@@ -51,15 +58,16 @@ export const signup = async (req, res) => {
 export const verifyUser = async (req, res) => {
   try {
     const { email, code } = req.body;
+    if (!email || !code) {
+      return res.status(400).json({ error: "Invalid or expired code" });
+    }
 
     const user = await User.findOne({ email })
       .select("+verificationCode +verificationCodeExpires");
 
-    if (!user)
-      return res.status(400).json({ error: "User not found" });
-
-    if (user.isVerified)
-      return res.status(400).json({ error: "User already verified" });
+    if (!user || user.isVerified) {
+      return res.status(400).json({ error: "Invalid or expired code" });
+    }
 
     if (
       !user.verificationCode ||
@@ -78,7 +86,8 @@ export const verifyUser = async (req, res) => {
     res.json({ message: "Account verified successfully ✅" });
 
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error("verifyUser failed", err);
+    res.status(500).json({ error: "Internal server error" });
   }
 };
 
@@ -88,23 +97,21 @@ export const verifyUser = async (req, res) => {
 export const login = async (req, res) => {
   try {
     const { email, password } = req.body;
+    if (!email || !password) {
+      return res.status(401).json({ error: "Invalid email or password" });
+    }
 
     const user = await User.findOne({ email })
       .select("+password");
 
-    if (!user)
-      return res.status(400).json({ error: "User not found" });
-
-    if (!user.isVerified) {
-      return res.status(403).json({
-        error: "Please verify your email before logging in",
-      });
+    if (!user || !user.isVerified) {
+      return res.status(401).json({ error: "Invalid email or password" });
     }
 
     const validPassword = await bcrypt.compare(password, user.password);
 
     if (!validPassword)
-      return res.status(400).json({ error: "Invalid password" });
+      return res.status(401).json({ error: "Invalid email or password" });
 
     const token = jwt.sign(
       { userId: user._id },
@@ -115,6 +122,7 @@ export const login = async (req, res) => {
     res.json({ message: "Logged in ", token });
 
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error("login failed", err);
+    res.status(500).json({ error: "Internal server error" });
   }
 };
