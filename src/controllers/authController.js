@@ -83,7 +83,21 @@ export const verifyUser = async (req, res) => {
 
     await user.save();
 
-    res.json({ message: "Account verified successfully ✅" });
+    const token = jwt.sign(
+      { userId: user._id },
+      process.env.JWT_SECRET,
+      { expiresIn: "1h" }
+    );
+
+    res.json({
+      message: "Account verified successfully ✅",
+      token,
+      user: {
+        id: user._id,
+        username: user.username,
+        email: user.email,
+      },
+    });
 
   } catch (err) {
     console.error("verifyUser failed", err);
