@@ -35,6 +35,12 @@ YOUTUBE_VIEWS_DIVISOR=100000
 # optional: coin rebalance source weights (defaults to LASTFM_WEIGHT / YOUTUBE_WEIGHT)
 COIN_LASTFM_WEIGHT=0.7
 COIN_YOUTUBE_WEIGHT=0.3
+
+# optional: RSS news ingestion (no API key needed)
+NEWS_RSS_FEEDS=https://www.notjustok.com/feed/,https://www.pulse.ng/entertainment/rss
+NEWS_MAX_ITEMS=20
+NEWS_CACHE_TTL_MS=600000
+NEWS_REQUEST_TIMEOUT_MS=8000
 ```
 
 ## Install and Run
@@ -62,6 +68,7 @@ Swagger UI is available at:
 - `GET /teams/me/daily?days=7` (Bearer token)
 - `GET /leaderboard/weekly`
 - `GET /leaderboard/season`
+- `GET /news?limit=20`
 
 ## Scripts
 - `npm run dev` - Start dev server with nodemon
@@ -92,3 +99,9 @@ Swagger UI is available at:
   3) `npm run seed:youtube`
   4) `npm run snapshot:daily`
   5) `npm run score:daily`
+
+## News Injection (RSS, No API Key)
+- Endpoint: `GET /news?limit=20`
+- Uses RSS/Atom feeds and normalizes into:
+  - `id`, `title`, `url`, `summary`, `imageUrl`, `source`, `publishedAt`
+- Feed fetch is cached in-memory (`NEWS_CACHE_TTL_MS`) to keep response fast and reduce source requests.
