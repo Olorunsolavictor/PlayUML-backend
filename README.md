@@ -41,6 +41,7 @@ NEWS_RSS_FEEDS=https://www.notjustok.com/feed/,https://www.pulse.ng/entertainmen
 NEWS_MAX_ITEMS=20
 NEWS_CACHE_TTL_MS=600000
 NEWS_REQUEST_TIMEOUT_MS=8000
+NEWS_REQUIRE_AFROBEATS=true
 ```
 
 ## Install and Run
