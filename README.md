@@ -112,3 +112,10 @@ Swagger UI is available at:
 - Uses RSS/Atom feeds and normalizes into:
   - `id`, `title`, `url`, `summary`, `imageUrl`, `source`, `publishedAt`
 - Feed fetch is cached in-memory (`NEWS_CACHE_TTL_MS`) to keep response fast and reduce source requests.
+
+## Daily Intel Cache
+- Endpoint: `GET /intel/me` (auth required)
+- Intel is now generated **once per user per UTC day** and then served from Mongo cache.
+- Optional forced refresh (admin only):
+  - `GET /intel/me?refresh=1`
+  - header: `x-admin-key: <ADMIN_API_KEY>`
