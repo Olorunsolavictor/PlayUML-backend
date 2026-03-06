@@ -2,7 +2,11 @@ import User from "../models/User.js";
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
 import { sendEmail } from "../utils/sendEmail.js";
+import crypto from "crypto";
 
+const createVerificationCode = () =>
+  Math.floor(100000 + Math.random() * 900000).toString();
+const createTempPassword = () => crypto.randomBytes(6).toString("base64url");
 
 // POST /auth/signup
 
@@ -15,17 +19,31 @@ export const signup = async (req, res) => {
 
     const existingUser = await User.findOne({ email });
     if (existingUser) {
-      return res.status(201).json({
-        message: "If this account can be used, verification instructions were sent.",
+      if (!existingUser.isVerified) {
+        existingUser.verificationCode = createVerificationCode();
+        existingUser.verificationCodeExpires = Date.now() + 10 * 60 * 1000;
+        await existingUser.save();
+
+        await sendEmail(
+          email,
+          "Verify Your PlayUML Account",
+          `Your verification code is: ${existingUser.verificationCode}`
+        );
+
+        return res.status(200).json({
+          message: "Account exists but is not verified. A new verification code was sent.",
+        });
+      }
+
+      return res.status(200).json({
+        message: "Account already exists. Please log in.",
       });
     }
 
     const salt = await bcrypt.genSalt(10);
     const hashedPassword = await bcrypt.hash(password, salt);
 
-    const verificationCode = Math.floor(
-      100000 + Math.random() * 900000
-    ).toString();
+    const verificationCode = createVerificationCode();
 
     const user = new User({
       username,
@@ -50,6 +68,80 @@ export const signup = async (req, res) => {
   } catch (err) {
     console.error("signup failed", err);
     res.status(500).json({ error: "Internal server error" });
+  }
+};
+
+// POST /auth/resend-code
+export const resendVerificationCode = async (req, res) => {
+  try {
+    const { email } = req.body;
+    if (!email) {
+      return res.status(400).json({ error: "Email is required" });
+    }
+
+    const user = await User.findOne({ email })
+      .select("+verificationCode +verificationCodeExpires");
+
+    // Keep response generic for safety.
+    if (!user || user.isVerified) {
+      return res.status(200).json({
+        message: "If this account can be verified, a new code has been sent.",
+      });
+    }
+
+    user.verificationCode = createVerificationCode();
+    user.verificationCodeExpires = Date.now() + 10 * 60 * 1000;
+    await user.save();
+
+    await sendEmail(
+      email,
+      "Verify Your PlayUML Account",
+      `Your verification code is: ${user.verificationCode}`
+    );
+
+    return res.status(200).json({
+      message: "If this account can be verified, a new code has been sent.",
+    });
+  } catch (err) {
+    console.error("resendVerificationCode failed", err);
+    return res.status(500).json({ error: "Internal server error" });
+  }
+};
+
+// POST /auth/forgot-password
+export const forgotPassword = async (req, res) => {
+  try {
+    const { email } = req.body;
+    if (!email) {
+      return res.status(400).json({ error: "Email is required" });
+    }
+
+    const user = await User.findOne({ email }).select("+password");
+
+    // Generic response to avoid account enumeration.
+    const genericResponse = {
+      message: "If this account exists, a temporary password has been sent.",
+    };
+
+    if (!user || !user.isVerified) {
+      return res.status(200).json(genericResponse);
+    }
+
+    const tempPassword = createTempPassword();
+    const salt = await bcrypt.genSalt(10);
+    user.password = await bcrypt.hash(tempPassword, salt);
+    await user.save();
+
+    await sendEmail(
+      email,
+      "Your PlayUML Temporary Password",
+      `Use this temporary password to sign in: ${tempPassword}\n\nPlease sign in and change it immediately.`
+    );
+
+    return res.status(200).json(genericResponse);
+  } catch (err) {
+    console.error("forgotPassword failed", err);
+    return res.status(500).json({ error: "Internal server error" });
   }
 };
 

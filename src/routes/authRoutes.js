@@ -1,5 +1,11 @@
 import express from "express";
-import { signup, login, verifyUser } from "../controllers/authController.js";
+import {
+  signup,
+  login,
+  verifyUser,
+  resendVerificationCode,
+  forgotPassword,
+} from "../controllers/authController.js";
 import { createIpRateLimiter } from "../middleware/rateLimit.js";
 
 const router = express.Router();
@@ -17,6 +23,16 @@ const verifyLimiter = createIpRateLimiter({
   windowMs: 10 * 60 * 1000,
   max: 15,
   message: "Too many verification attempts. Please try again shortly.",
+});
+const resendLimiter = createIpRateLimiter({
+  windowMs: 10 * 60 * 1000,
+  max: 8,
+  message: "Too many resend attempts. Please try again shortly.",
+});
+const forgotPasswordLimiter = createIpRateLimiter({
+  windowMs: 10 * 60 * 1000,
+  max: 8,
+  message: "Too many password reset attempts. Please try again shortly.",
 });
 /**
  * @swagger
@@ -122,5 +138,7 @@ router.post("/login", loginLimiter, login);
 
 
 router.post("/verify", verifyLimiter, verifyUser);
+router.post("/resend-code", resendLimiter, resendVerificationCode);
+router.post("/forgot-password", forgotPasswordLimiter, forgotPassword);
 
 export default router;
