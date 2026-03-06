@@ -8,18 +8,9 @@ const MAX_WEEKLY_SWAPS = Number(process.env.MAX_WEEKLY_SWAPS ?? 2);
 const MAX_WEEKLY_CAPTAIN_CHANGES = Number(
   process.env.MAX_WEEKLY_CAPTAIN_CHANGES ?? 7,
 );
-const TEAM_LOCK_ERROR =
-  "Team changes are locked for today. Try again after UTC day reset.";
 
 const ARTISTE_SAFE_SELECT =
   "name imageUrl spotifyId coinValue popularity followers isActive";
-
-const getDayKeyUTC = (date = new Date()) => {
-  const y = date.getUTCFullYear();
-  const m = String(date.getUTCMonth() + 1).padStart(2, "0");
-  const d = String(date.getUTCDate()).padStart(2, "0");
-  return `${y}-${m}-${d}`;
-};
 
 const getISOWeekKeyUTC = (date = new Date()) => {
   const tmp = new Date(
@@ -38,12 +29,6 @@ const normalizeActionWeek = (team, weekKey) => {
     team.swapsUsedThisWeek = 0;
     team.captainChangesUsedThisWeek = 0;
   }
-};
-
-const isLockedForToday = async (teamId) => {
-  const todayKey = getDayKeyUTC();
-  const exists = await TeamDailyScore.exists({ teamId, day: todayKey });
-  return Boolean(exists);
 };
 
 // POST /teams
@@ -151,10 +136,6 @@ export const updateCaptain = async (req, res) => {
     if (!team) return res.status(404).json({ error: "No team found" });
     normalizeActionWeek(team, weekKey);
 
-    if (await isLockedForToday(team._id)) {
-      return res.status(409).json({ error: TEAM_LOCK_ERROR });
-    }
-
     const isInTeam = team.artisteIds.some(
       (id) => String(id) === String(captainId)
     );
@@ -223,10 +204,6 @@ export const swapArtiste = async (req, res) => {
     const team = await Team.findOne({ userId });
     if (!team) return res.status(404).json({ error: "No team found" });
     normalizeActionWeek(team, weekKey);
-
-    if (await isLockedForToday(team._id)) {
-      return res.status(409).json({ error: TEAM_LOCK_ERROR });
-    }
 
     if ((team.swapsUsedThisWeek || 0) >= MAX_WEEKLY_SWAPS) {
       return res
