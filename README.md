@@ -42,6 +42,11 @@ NEWS_MAX_ITEMS=20
 NEWS_CACHE_TTL_MS=600000
 NEWS_REQUEST_TIMEOUT_MS=8000
 NEWS_REQUIRE_AFROBEATS=true
+
+# optional: AI intel copy (captain/transfer/risk explanations)
+AI_PROVIDER=gemini
+GEMINI_API_KEY=your_gemini_api_key
+GEMINI_MODEL=gemini-2.0-flash
 ```
 
 ## Install and Run
@@ -70,6 +75,7 @@ Swagger UI is available at:
 - `GET /leaderboard/weekly`
 - `GET /leaderboard/season`
 - `GET /news?limit=20`
+- `GET /intel/me` (Bearer token)
 
 ## Scripts
 - `npm run dev` - Start dev server with nodemon
