@@ -1,6 +1,7 @@
 import Team from "../models/Team.js";
 import Artiste from "../models/Artiste.js";
 import ArtistDailyStat from "../models/ArtistDailyStat.js";
+import UserDailyIntel from "../models/UserDailyIntel.js";
 import { getLatestNews } from "./newsService.js";
 import { generateIntelCopy } from "./aiIntelService.js";
 
@@ -68,6 +69,13 @@ function computeMomentum({
     lfmPlaycountDelta / LFMP_DIV,
   ];
   return Number(parts.reduce((sum, val) => sum + val, 0).toFixed(4));
+}
+
+function getDayKeyUTC(date = new Date()) {
+  const y = date.getUTCFullYear();
+  const m = String(date.getUTCMonth() + 1).padStart(2, "0");
+  const d = String(date.getUTCDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
 }
 
 function findMentionedArtists(newsItem, artists) {
@@ -146,7 +154,7 @@ function normalizeArtistIntel(artist, daily, mentions) {
   };
 }
 
-export async function getMyDailyIntel(userId) {
+async function buildDailyIntelPayload(userId) {
   const team = await Team.findOne({ userId }).lean();
   if (!team) return null;
 
@@ -235,7 +243,6 @@ export async function getMyDailyIntel(userId) {
   });
 
   return {
-    generatedAt: new Date().toISOString(),
     provider: aiCopy.provider,
     newsSampleSize: newsItems.length,
     captainPicks: captainPicks.map((item) => withReason(item, aiCopy.captain)),
@@ -246,3 +253,47 @@ export async function getMyDailyIntel(userId) {
   };
 }
 
+export async function getMyDailyIntel({
+  userId,
+  forceRefresh = false,
+} = {}) {
+  const day = getDayKeyUTC();
+
+  if (!forceRefresh) {
+    const existing = await UserDailyIntel.findOne({ userId, day }).lean();
+    if (existing?.payload) {
+      return {
+        ...existing.payload,
+        day,
+        generatedAt: new Date(
+          existing.generatedAt || existing.updatedAt || Date.now(),
+        ).toISOString(),
+        fromCache: true,
+      };
+    }
+  }
+
+  const payload = await buildDailyIntelPayload(userId);
+  if (!payload) return null;
+
+  const now = new Date();
+  await UserDailyIntel.findOneAndUpdate(
+    { userId, day },
+    {
+      userId,
+      day,
+      generatedAt: now,
+      provider: payload.provider,
+      newsSampleSize: payload.newsSampleSize,
+      payload,
+    },
+    { upsert: true, setDefaultsOnInsert: true },
+  );
+
+  return {
+    ...payload,
+    day,
+    generatedAt: now.toISOString(),
+    fromCache: false,
+  };
+}
