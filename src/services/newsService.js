@@ -7,6 +7,52 @@ const DEFAULT_FEEDS = [
 const CACHE_TTL_MS = Number(process.env.NEWS_CACHE_TTL_MS ?? 10 * 60 * 1000);
 const REQUEST_TIMEOUT_MS = Number(process.env.NEWS_REQUEST_TIMEOUT_MS ?? 8000);
 const MAX_ITEMS_DEFAULT = Number(process.env.NEWS_MAX_ITEMS ?? 20);
+const REQUIRE_AFROBEATS =
+  String(process.env.NEWS_REQUIRE_AFROBEATS ?? "true").toLowerCase() !==
+  "false";
+
+const MUSIC_KEYWORDS = [
+  "music",
+  "song",
+  "single",
+  "album",
+  "ep",
+  "track",
+  "artist",
+  "record label",
+  "charts",
+  "stream",
+  "streaming",
+  "playlist",
+  "video",
+  "audiomack",
+  "spotify",
+  "apple music",
+  "youtube",
+];
+
+const AFROBEATS_KEYWORDS = [
+  "afrobeats",
+  "afrobeat",
+  "afropop",
+  "naija",
+  "nigerian",
+  "burna boy",
+  "wizkid",
+  "davido",
+  "tems",
+  "rema",
+  "asake",
+  "ayra starr",
+  "fireboy",
+  "omah lay",
+  "joeboy",
+  "simi",
+  "tiwa savage",
+  "kizz daniel",
+  "adekunle gold",
+  "naira marley",
+];
 
 let cache = {
   expiresAt: 0,
@@ -58,6 +104,9 @@ function extractRssItems(xml, sourceLabel) {
       const image = (
         block.match(/<enclosure[^>]*url=["']([^"']+)["']/i)?.[1] ||
         block.match(/<media:content[^>]*url=["']([^"']+)["']/i)?.[1] ||
+        block.match(/<media:thumbnail[^>]*url=["']([^"']+)["']/i)?.[1] ||
+        block.match(/<itunes:image[^>]*href=["']([^"']+)["']/i)?.[1] ||
+        block.match(/<img[^>]*src=["']([^"']+)["']/i)?.[1] ||
         ""
       ).trim();
 
@@ -86,6 +135,12 @@ function extractAtomItems(xml, sourceLabel) {
       const publishedAt = extractTagText(block, ["published", "updated"]);
       const link =
         block.match(/<link[^>]*href=["']([^"']+)["'][^>]*>/i)?.[1]?.trim() || "";
+      const image = (
+        block.match(/<media:thumbnail[^>]*url=["']([^"']+)["']/i)?.[1] ||
+        block.match(/<media:content[^>]*url=["']([^"']+)["']/i)?.[1] ||
+        block.match(/<img[^>]*src=["']([^"']+)["']/i)?.[1] ||
+        ""
+      ).trim();
 
       if (!title || !link) return null;
 
@@ -94,7 +149,7 @@ function extractAtomItems(xml, sourceLabel) {
         title,
         url: link,
         summary,
-        imageUrl: "",
+        imageUrl: image,
         source: sourceLabel,
         publishedAt: publishedAt || null,
       };
@@ -117,6 +172,19 @@ function extractSourceLabel(xml, feedUrl) {
   } catch {
     return "feed";
   }
+}
+
+function containsAnyKeyword(haystack, keywords) {
+  const text = haystack.toLowerCase();
+  return keywords.some((keyword) => text.includes(keyword));
+}
+
+function isRelevant(item) {
+  const haystack = `${item.title || ""} ${item.summary || ""}`.toLowerCase();
+  const hasMusicSignal = containsAnyKeyword(haystack, MUSIC_KEYWORDS);
+  if (!hasMusicSignal) return false;
+  if (!REQUIRE_AFROBEATS) return true;
+  return containsAnyKeyword(haystack, AFROBEATS_KEYWORDS);
 }
 
 function sortByDateDesc(items) {
@@ -176,6 +244,7 @@ export async function getLatestNews(limit = MAX_ITEMS_DEFAULT) {
   const seen = new Set();
   for (const item of sortByDateDesc(merged)) {
     if (seen.has(item.url)) continue;
+    if (!isRelevant(item)) continue;
     seen.add(item.url);
     deduped.push(item);
   }
