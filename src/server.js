@@ -1,20 +1,27 @@
 import express from "express";
+import http from "http";
 import mongoose from "mongoose";
 import dotenv from "dotenv";
 import Artiste from "./models/Artiste.js";
 import authRoutes from "./routes/authRoutes.js";
 import cors from "cors";
+import jwt from "jsonwebtoken";
+import { Server } from "socket.io";
 import swaggerUi from "swagger-ui-express";
 import swaggerSpec from "./config/swagger.js";
 import artisteRoutes from "./routes/artisteRoutes.js";
 import teamRoutes from "./routes/teamRoutes.js";
 import userRoutes from "./routes/userRoutes.js";
 import leaderboardRoutes from "./routes/leaderboardRoutes.js";
+import banterRoutes from "./routes/banterRoutes.js";
 import { requireAdminKey } from "./middleware/admin.js";
+import { setIO } from "./socket/io.js";
+import { registerBanterSocketHandlers } from "./socket/banterSocket.js";
 
 dotenv.config();
 
 const app = express();
+const server = http.createServer(app);
 app.disable("x-powered-by");
 app.set("trust proxy", 1);
 app.use(express.json({ limit: "200kb" }));
@@ -58,6 +65,41 @@ const corsOptions = {
   credentials: true,
 };
 
+const io = new Server(server, {
+  cors: {
+    origin: (origin, callback) => {
+      if (!origin) return callback(null, true);
+      const normalizedOrigin = origin.replace(/\/$/, "");
+      const isAllowedExact = allowedOrigins.includes(normalizedOrigin);
+      const isAllowedByRegex = allowedOriginRegex.some((regex) =>
+        regex.test(normalizedOrigin),
+      );
+      if (isAllowedExact || isAllowedByRegex) return callback(null, true);
+      return callback(new Error(`Socket CORS blocked for origin: ${origin}`));
+    },
+    credentials: true,
+  },
+});
+
+io.use((socket, next) => {
+  try {
+    const bearer = socket.handshake.auth?.token || socket.handshake.headers?.authorization || "";
+    const token = String(bearer).startsWith("Bearer ")
+      ? String(bearer).slice(7)
+      : String(bearer);
+
+    if (!token) return next(new Error("Unauthorized"));
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    socket.data.userId = decoded.userId;
+    next();
+  } catch {
+    next(new Error("Unauthorized"));
+  }
+});
+
+setIO(io);
+registerBanterSocketHandlers(io);
+
 // Enable CORS before routes
 app.use(cors(corsOptions));
 app.options(/.*/, cors(corsOptions));
@@ -98,7 +140,8 @@ app.post("/artistes", requireAdminKey, async (req, res) => {
 app.use("/teams", teamRoutes);
 app.use("/teams/me", teamRoutes);
 app.use("/leaderboard", leaderboardRoutes);
+app.use("/banter", banterRoutes);
 
-app.listen(PORT, () => {
+server.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });

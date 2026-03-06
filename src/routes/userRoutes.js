@@ -1,9 +1,15 @@
 // src/routes/userRoutes.js
 import express from "express";
-import { getMe } from "../controllers/userController.js";
+import { getMe, updateMyPassword } from "../controllers/userController.js";
 import { requireAuth } from "../middleware/auth.js";
+import { createIpRateLimiter } from "../middleware/rateLimit.js";
 
 const router = express.Router();
+const passwordUpdateLimiter = createIpRateLimiter({
+  windowMs: 10 * 60 * 1000,
+  max: 12,
+  message: "Too many password change attempts. Please try again shortly.",
+});
 
 /**
  * @swagger
@@ -33,5 +39,6 @@ const router = express.Router();
  *         description: Missing/invalid token
  */
 router.get("/me", requireAuth, getMe);
+router.patch("/me/password", requireAuth, passwordUpdateLimiter, updateMyPassword);
 
 export default router;
