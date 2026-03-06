@@ -15,6 +15,7 @@ import userRoutes from "./routes/userRoutes.js";
 import leaderboardRoutes from "./routes/leaderboardRoutes.js";
 import banterRoutes from "./routes/banterRoutes.js";
 import newsRoutes from "./routes/newsRoutes.js";
+import intelRoutes from "./routes/intelRoutes.js";
 import { requireAdminKey } from "./middleware/admin.js";
 import { setIO } from "./socket/io.js";
 import { registerBanterSocketHandlers } from "./socket/banterSocket.js";
@@ -143,6 +144,7 @@ app.use("/teams/me", teamRoutes);
 app.use("/leaderboard", leaderboardRoutes);
 app.use("/banter", banterRoutes);
 app.use("/news", newsRoutes);
+app.use("/intel", intelRoutes);
 
 server.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
