@@ -77,6 +77,7 @@ Swagger UI is available at:
 - `GET /news?limit=20`
 - `GET /intel/me` (Bearer token)
 - `GET /admin/run-daily-pipeline?key=YOUR_ADMIN_API_KEY`
+- `GET /admin/send-daily-digest?key=YOUR_ADMIN_API_KEY`
 
 ## Scripts
 - `npm run dev` - Start dev server with nodemon
@@ -86,6 +87,7 @@ Swagger UI is available at:
 - `npm run snapshot:daily` - Save daily Spotify stats snapshot
 - `npm run score:daily` - Compute daily team scores and leaderboard totals
 - `npm run daily:pipeline` - Run snapshot, rebalance coins, sync today's coin snapshot, clear daily intel cache, then score
+- `npm run digest:daily` - Send one daily digest email per verified user with a team
 - `npm run rebalance:coins` - Rebalance coins (percentile strategy)
 - `npm run rebalance:coins:simple` - Rebalance coins (simple strategy)
 - `npm run reset:scoring` - Reset all team scoring totals and daily score history
@@ -137,6 +139,15 @@ Swagger UI is available at:
   - `15 1 * * *` UTC
 - Optional status check:
   - `GET https://YOUR_BACKEND_DOMAIN/admin/run-daily-pipeline/status?key=YOUR_ADMIN_API_KEY`
+
+## Daily Digest
+- Trigger URL:
+  - `GET https://YOUR_BACKEND_DOMAIN/admin/send-daily-digest?key=YOUR_ADMIN_API_KEY`
+- Status URL:
+  - `GET https://YOUR_BACKEND_DOMAIN/admin/send-daily-digest/status?key=YOUR_ADMIN_API_KEY`
+- Digest sends once per user per UTC day and skips users without a verified email or drafted team.
+- Suggested schedule:
+  - run this after the pipeline, for example `06:30 UTC` if your pipeline runs earlier in the morning
 
 ## Fresh Season Reset
 - If you want a clean restart without deleting users or drafted teams:

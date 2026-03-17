@@ -16,3 +16,19 @@ export const sendEmail = async (to, subject, text) => {
   await sgMail.send(msg);
 };
 
+export const sendEmailMessage = async ({
+  to,
+  subject,
+  text,
+  html,
+}) => {
+  const msg = {
+    to,
+    from: process.env.FROM_EMAIL,
+    subject,
+    text,
+    ...(html ? { html } : {}),
+  };
+
+  await sgMail.send(msg);
+};
