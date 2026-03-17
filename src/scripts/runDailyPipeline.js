@@ -1,6 +1,8 @@
 import mongoose from "mongoose";
 import dotenv from "dotenv";
 import { spawn } from "node:child_process";
+import { existsSync } from "node:fs";
+import path from "node:path";
 import { fileURLToPath } from "node:url";
 import Artiste from "../models/Artiste.js";
 import ArtistDailyStat from "../models/ArtistDailyStat.js";
@@ -15,8 +17,27 @@ const getDayKeyUTC = (date = new Date()) => {
   return `${y}-${m}-${d}`;
 };
 
-const resolveScriptPath = (relativePath) =>
-  fileURLToPath(new URL(relativePath, import.meta.url));
+const currentFilePath = fileURLToPath(import.meta.url);
+const currentDir = path.dirname(currentFilePath);
+
+const resolveScriptPath = (fileName) => {
+  const candidates = [
+    path.join(currentDir, fileName),
+    path.join(process.cwd(), "src", "scripts", fileName),
+    path.join(process.cwd(), "scripts", fileName),
+    path.join(process.cwd(), fileName),
+    path.join(path.dirname(process.cwd()), "src", "scripts", fileName),
+  ];
+
+  const resolved = candidates.find((candidate) => existsSync(candidate));
+  if (!resolved) {
+    throw new Error(
+      `Unable to locate ${fileName}. Checked: ${candidates.join(" | ")}`,
+    );
+  }
+
+  return resolved;
+};
 
 const runNodeScript = (scriptPath) =>
   new Promise((resolve, reject) => {
@@ -65,10 +86,20 @@ const run = async () => {
     const day = getDayKeyUTC();
     console.log(`Daily pipeline starting for ${day}`);
 
-    await runNodeScript(resolveScriptPath("./runDailySnapshot.js"));
-    await runNodeScript(resolveScriptPath("./rebalanceCoinsPercentile.js"));
+    const snapshotScript = resolveScriptPath("runDailySnapshot.js");
+    const rebalanceScript = resolveScriptPath("rebalanceCoinsPercentile.js");
+    const scoringScript = resolveScriptPath("runDailyScoring.js");
+
+    console.log("Resolved script paths:", {
+      snapshotScript,
+      rebalanceScript,
+      scoringScript,
+    });
+
+    await runNodeScript(snapshotScript);
+    await runNodeScript(rebalanceScript);
     await syncTodayCoinValues(day);
-    await runNodeScript(resolveScriptPath("./runDailyScoring.js"));
+    await runNodeScript(scoringScript);
 
     console.log("Daily pipeline complete ✅");
     process.exit(0);
