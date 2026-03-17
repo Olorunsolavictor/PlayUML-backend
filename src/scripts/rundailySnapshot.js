@@ -31,7 +31,7 @@ const run = async () => {
     console.log("Snapshot day:", day);
 
     const artistes = await Artiste.find({ isActive: true }).select(
-      "_id spotifyId youtubeChannelId lastfmArtistName name",
+      "_id spotifyId youtubeChannelId lastfmArtistName name popularity followers coinValue",
     );
     if (artistes.length === 0) {
       console.log("No artistes found. Exiting.");
@@ -43,14 +43,18 @@ const run = async () => {
     const spotifyIds = artistes.map((a) => a.spotifyId).filter(Boolean);
     const spotifyBatches = chunk(spotifyIds, 50);
 
-    for (const ids of spotifyBatches) {
-      const spotifyArtists = await getMultipleArtistsFromSpotify(ids);
-      for (const sa of spotifyArtists) {
-        spotifyStatMap.set(sa.id, {
-          popularity: sa.popularity ?? 0,
-          followers: sa.followers?.total ?? 0,
-        });
+    try {
+      for (const ids of spotifyBatches) {
+        const spotifyArtists = await getMultipleArtistsFromSpotify(ids);
+        for (const sa of spotifyArtists) {
+          spotifyStatMap.set(sa.id, {
+            popularity: sa.popularity ?? 0,
+            followers: sa.followers?.total ?? 0,
+          });
+        }
       }
+    } catch (err) {
+      console.warn("Spotify snapshot skipped:", err.message);
     }
 
     // Build YouTube stat map
@@ -117,8 +121,8 @@ const run = async () => {
     // Upsert one stat row per artiste/day
     const ops = artistes.map((a) => {
       const spotify = spotifyStatMap.get(a.spotifyId) || {
-        popularity: 0,
-        followers: 0,
+        popularity: Number(a.popularity || 0),
+        followers: Number(a.followers || 0),
       };
       const youtube = a.youtubeChannelId
         ? youtubeStatMap.get(a.youtubeChannelId) || {
