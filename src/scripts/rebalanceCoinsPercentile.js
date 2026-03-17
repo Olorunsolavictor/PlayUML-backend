@@ -29,12 +29,12 @@ const MAX_DAILY_MOVE = 2;
 const COIN_DECIMALS = 2;
 const INACTIVITY_DAYS = 3;
 const INACTIVITY_PENALTY = 1;
+const COIN_ZSCORE_MULTIPLIER = Number(
+  process.env.COIN_ZSCORE_MULTIPLIER ?? 0.3,
+);
+const MARKET_WEIGHT_FLOOR = 0.55;
+const MARKET_WEIGHT_CEIL = 1.45;
 const roundCoin = (n) => Number(n.toFixed(COIN_DECIMALS));
-
-const percentileToCoins = (p) => {
-  const bounded = clamp(p, 0, 1);
-  return roundCoin(MIN_COINS + bounded * (MAX_COINS - MIN_COINS));
-};
 
 const dayKeyFromDate = (date) => {
   const y = date.getUTCFullYear();
@@ -84,6 +84,46 @@ const calcLastfmDailyScore = ({ listenerDelta, playcountDelta }) => {
   );
 };
 
+const sumCoins = (entries, key) =>
+  roundCoin(entries.reduce((sum, entry) => sum + Number(entry[key] || 0), 0));
+
+const adjustEntriesToTotal = (entries, targetTotal) => {
+  let residual = roundCoin(targetTotal - sumCoins(entries, "nextCoin"));
+
+  while (Math.abs(residual) >= 0.01) {
+    const step = residual > 0 ? 0.01 : -0.01;
+    const ordered = [...entries].sort((a, b) =>
+      residual > 0
+        ? b.targetGap - a.targetGap
+        : a.targetGap - b.targetGap,
+    );
+
+    let moved = false;
+
+    for (const entry of ordered) {
+      const candidate = roundCoin(entry.nextCoin + step);
+      if (candidate < entry.minNextCoin || candidate > entry.maxNextCoin) {
+        continue;
+      }
+
+      entry.nextCoin = candidate;
+      entry.targetGap = roundCoin(entry.targetCoin - entry.nextCoin);
+      residual = roundCoin(residual - step);
+      moved = true;
+
+      if (Math.abs(residual) < 0.01) {
+        break;
+      }
+    }
+
+    if (!moved) {
+      break;
+    }
+  }
+
+  return entries;
+};
+
 const run = async () => {
   try {
     await mongoose.connect(process.env.MONGO_URI);
@@ -102,6 +142,12 @@ const run = async () => {
       "Coin source weights:",
       `lastfm=${COIN_SOURCE_WEIGHTS.lastfm}`,
       `youtube=${COIN_SOURCE_WEIGHTS.youtube}`,
+    );
+    console.log(
+      "Market settings:",
+      `zMultiplier=${COIN_ZSCORE_MULTIPLIER}`,
+      `dailyMove=${MAX_DAILY_MOVE}`,
+      `inactivePenalty=${INACTIVITY_PENALTY}`,
     );
 
     // Need N+1 days to compute N day-over-day deltas.
@@ -171,36 +217,96 @@ const run = async () => {
       };
     });
 
-    // Sort by score ascending for percentile ranking
-    withFinalScore.sort((a, b) => a.rollingScore - b.rollingScore);
-
     const n = withFinalScore.length;
+    const currentTotalCoins = sumCoins(
+      withFinalScore.map((entry) => ({
+        coinValue: Number(entry.coinValue || MIN_COINS),
+      })),
+      "coinValue",
+    );
+    const marketAverageCoin = currentTotalCoins / n;
+    const averageRollingScore =
+      withFinalScore.reduce((sum, entry) => sum + entry.rollingScore, 0) / n;
+    const variance =
+      withFinalScore.reduce((sum, entry) => {
+        const delta = entry.rollingScore - averageRollingScore;
+        return sum + delta * delta;
+      }, 0) / n;
+    const stdDev = Math.sqrt(variance);
+
+    const targetEntries = withFinalScore.map((entry) => {
+      const zScore =
+        stdDev > 0 ? (entry.rollingScore - averageRollingScore) / stdDev : 0;
+      const weight = clamp(
+        1 + zScore * COIN_ZSCORE_MULTIPLIER,
+        MARKET_WEIGHT_FLOOR,
+        MARKET_WEIGHT_CEIL,
+      );
+
+      return {
+        ...entry,
+        oldCoin: Number(entry.coinValue || MIN_COINS),
+        marketWeight: weight,
+        rawTargetCoin: marketAverageCoin * weight,
+      };
+    });
+
+    const rawTargetTotal = targetEntries.reduce(
+      (sum, entry) => sum + entry.rawTargetCoin,
+      0,
+    );
+    const targetScale = rawTargetTotal > 0 ? currentTotalCoins / rawTargetTotal : 1;
+
     const updates = [];
-    const newCoins = [];
+    const finalEntries = adjustEntriesToTotal(
+      targetEntries.map((entry) => {
+        const targetCoin = roundCoin(
+          clamp(entry.rawTargetCoin * targetScale, MIN_COINS, MAX_COINS),
+        );
+        const inactivePenalty =
+          entry.inactivityDays >= INACTIVITY_DAYS ? INACTIVITY_PENALTY : 0;
 
-    for (let i = 0; i < n; i++) {
-      const p = n === 1 ? 1 : i / (n - 1);
-      const targetCoin = percentileToCoins(p);
-      const oldCoin = withFinalScore[i].coinValue || MIN_COINS;
+        let nextCoin = entry.oldCoin;
+        if (targetCoin > entry.oldCoin) {
+          nextCoin = entry.oldCoin + Math.min(MAX_DAILY_MOVE, targetCoin - entry.oldCoin);
+        }
+        if (targetCoin < entry.oldCoin) {
+          nextCoin = entry.oldCoin - Math.min(MAX_DAILY_MOVE, entry.oldCoin - targetCoin);
+        }
 
-      let nextCoin = oldCoin;
-      if (targetCoin > oldCoin) nextCoin = oldCoin + Math.min(MAX_DAILY_MOVE, targetCoin - oldCoin);
-      if (targetCoin < oldCoin) nextCoin = oldCoin - Math.min(MAX_DAILY_MOVE, oldCoin - targetCoin);
+        nextCoin = roundCoin(
+          clamp(nextCoin - inactivePenalty, MIN_COINS, MAX_COINS),
+        );
 
-      if (withFinalScore[i].inactivityDays >= INACTIVITY_DAYS) {
-        nextCoin -= INACTIVITY_PENALTY;
-      }
+        return {
+          ...entry,
+          targetCoin,
+          nextCoin,
+          minNextCoin: roundCoin(
+            clamp(
+              entry.oldCoin - MAX_DAILY_MOVE - inactivePenalty,
+              MIN_COINS,
+              MAX_COINS,
+            ),
+          ),
+          maxNextCoin: roundCoin(
+            clamp(entry.oldCoin + MAX_DAILY_MOVE, MIN_COINS, MAX_COINS),
+          ),
+          targetGap: roundCoin(targetCoin - nextCoin),
+        };
+      }),
+      currentTotalCoins,
+    );
 
-      const coins = roundCoin(clamp(nextCoin, MIN_COINS, MAX_COINS));
+    const newCoins = finalEntries.map((entry) => entry.nextCoin);
 
+    for (const entry of finalEntries) {
       updates.push({
         updateOne: {
-          filter: { _id: withFinalScore[i]._id },
-          update: { $set: { coinValue: coins } },
+          filter: { _id: entry._id },
+          update: { $set: { coinValue: entry.nextCoin } },
         },
       });
-
-      newCoins.push(coins);
     }
 
     await Artiste.bulkWrite(updates);
@@ -211,9 +317,23 @@ const run = async () => {
     const p10 = newCoins[Math.floor(newCoins.length * 0.1)];
     const p50 = newCoins[Math.floor(newCoins.length * 0.5)];
     const p90 = newCoins[Math.floor(newCoins.length * 0.9)];
+    const upCount = finalEntries.filter((entry) => entry.nextCoin > entry.oldCoin).length;
+    const downCount = finalEntries.filter((entry) => entry.nextCoin < entry.oldCoin).length;
+    const flatCount = finalEntries.length - upCount - downCount;
 
-    console.log("✅ Rebalanced coin values (Last.fm + YouTube rolling percentile)");
-    console.log({ min, p10, p50, p90, max });
+    console.log("✅ Rebalanced coin values (market-neutral Last.fm + YouTube)");
+    console.log({
+      min,
+      p10,
+      p50,
+      p90,
+      max,
+      totalCoinsBefore: currentTotalCoins,
+      totalCoinsAfter: sumCoins(finalEntries, "nextCoin"),
+      upCount,
+      downCount,
+      flatCount,
+    });
 
     process.exit(0);
   } catch (err) {
