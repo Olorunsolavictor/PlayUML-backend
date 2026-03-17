@@ -1,6 +1,7 @@
 import mongoose from "mongoose";
 import dotenv from "dotenv";
 import { spawn } from "node:child_process";
+import { fileURLToPath } from "node:url";
 import Artiste from "../models/Artiste.js";
 import ArtistDailyStat from "../models/ArtistDailyStat.js";
 import UserDailyIntel from "../models/UserDailyIntel.js";
@@ -13,6 +14,9 @@ const getDayKeyUTC = (date = new Date()) => {
   const d = String(date.getUTCDate()).padStart(2, "0");
   return `${y}-${m}-${d}`;
 };
+
+const resolveScriptPath = (relativePath) =>
+  fileURLToPath(new URL(relativePath, import.meta.url));
 
 const runNodeScript = (scriptPath) =>
   new Promise((resolve, reject) => {
@@ -61,10 +65,10 @@ const run = async () => {
     const day = getDayKeyUTC();
     console.log(`Daily pipeline starting for ${day}`);
 
-    await runNodeScript("src/scripts/runDailySnapshot.js");
-    await runNodeScript("src/scripts/rebalanceCoinsPercentile.js");
+    await runNodeScript(resolveScriptPath("./runDailySnapshot.js"));
+    await runNodeScript(resolveScriptPath("./rebalanceCoinsPercentile.js"));
     await syncTodayCoinValues(day);
-    await runNodeScript("src/scripts/runDailyScoring.js");
+    await runNodeScript(resolveScriptPath("./runDailyScoring.js"));
 
     console.log("Daily pipeline complete ✅");
     process.exit(0);
@@ -75,4 +79,3 @@ const run = async () => {
 };
 
 run();
-
