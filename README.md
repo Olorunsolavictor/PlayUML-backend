@@ -84,9 +84,11 @@ Swagger UI is available at:
 - `npm run seed:afrobeats` - Seed Afrobeats artiste set
 - `npm run snapshot:daily` - Save daily Spotify stats snapshot
 - `npm run score:daily` - Compute daily team scores and leaderboard totals
+- `npm run daily:pipeline` - Run snapshot, rebalance coins, sync today's coin snapshot, clear daily intel cache, then score
 - `npm run rebalance:coins` - Rebalance coins (percentile strategy)
 - `npm run rebalance:coins:simple` - Rebalance coins (simple strategy)
 - `npm run reset:scoring` - Reset all team scoring totals and daily score history
+- `npm run reset:game` - Clear daily stats, intel cache, and score history while keeping users and team selections
 
 ## Scoring (Current Phase)
 - `lastfmScore = (listenerDelta / LASTFM_LISTENERS_DIVISOR) + (playcountDelta / LASTFM_PLAYCOUNT_DIVISOR)`
@@ -104,8 +106,7 @@ Swagger UI is available at:
   1) `npm run seed:afrobeats`
   2) Add tricky overrides in `src/scripts/seedYoutubeChannels.js` (for example `Wizkid: "starboytv"`)
   3) `npm run seed:youtube`
-  4) `npm run snapshot:daily`
-  5) `npm run score:daily`
+  4) `npm run daily:pipeline`
 
 ## News Injection (RSS, No API Key)
 - Endpoint: `GET /news?limit=20`
@@ -119,3 +120,14 @@ Swagger UI is available at:
 - Optional forced refresh (admin only):
   - `GET /intel/me?refresh=1`
   - header: `x-admin-key: <ADMIN_API_KEY>`
+
+## Cron Recommendation
+- Use one Render cron job instead of multiple separate jobs.
+- Command: `npm run daily:pipeline`
+- Suggested schedule: `15 1 * * *` UTC
+- This keeps ordering correct: snapshot -> coin rebalance -> sync today's coin values -> clear today's intel cache -> score teams
+
+## Fresh Season Reset
+- If you want a clean restart without deleting users or drafted teams:
+  1) `npm run reset:game`
+  2) `npm run daily:pipeline`

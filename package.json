@@ -10,10 +10,12 @@
     "seed:youtube": "node src/scripts/seedYoutubeChannels.js",
     "snapshot:daily": "node src/scripts/runDailySnapshot.js",
     "score:daily": "node src/scripts/runDailyScoring.js",
+    "daily:pipeline": "node src/scripts/runDailyPipeline.js",
     "seed:afrobeats": "node src/scripts/seedAfrobeats100.js",
     "rebalance:coins": "node src/scripts/rebalanceCoinsPercentile.js",
     "rebalance:coins:simple": "node src/scripts/rebalanceCoinsSimple.js",
-    "reset:scoring": "node src/scripts/resetGameScoring.js"
+    "reset:scoring": "node src/scripts/resetGameScoring.js",
+    "reset:game": "node src/scripts/resetGameState.js"
   },
   "keywords": [],
   "author": "",
