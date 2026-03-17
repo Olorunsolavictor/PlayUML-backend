@@ -13,12 +13,26 @@ const pipelineState = {
   lastError: null,
   lastExitCode: null,
   pid: null,
+  recentLogs: [],
+};
+
+const pushLog = (level, message) => {
+  pipelineState.recentLogs.push({
+    level,
+    message,
+    at: new Date().toISOString(),
+  });
+
+  if (pipelineState.recentLogs.length > 80) {
+    pipelineState.recentLogs = pipelineState.recentLogs.slice(-80);
+  }
 };
 
 const forwardLogs = (stream, method, pid) => {
   stream.on("data", (chunk) => {
     const message = String(chunk || "").trim();
     if (!message) return;
+    pushLog(method, `[daily-pipeline:${pid}] ${message}`);
     console[method](`[daily-pipeline:${pid}] ${message}`);
   });
 };
@@ -47,6 +61,8 @@ export const triggerDailyPipelineJob = () => {
   pipelineState.lastError = null;
   pipelineState.lastExitCode = null;
   pipelineState.pid = child.pid ?? null;
+  pipelineState.recentLogs = [];
+  pushLog("log", "Daily pipeline process started");
 
   if (child.stdout) forwardLogs(child.stdout, "log", child.pid ?? "n/a");
   if (child.stderr) forwardLogs(child.stderr, "error", child.pid ?? "n/a");
@@ -58,6 +74,7 @@ export const triggerDailyPipelineJob = () => {
     pipelineState.lastError = error.message;
     pipelineState.lastExitCode = null;
     pipelineState.pid = null;
+    pushLog("error", error.message);
   });
 
   child.on("exit", (code) => {
@@ -67,6 +84,12 @@ export const triggerDailyPipelineJob = () => {
     pipelineState.lastStatus = code === 0 ? "succeeded" : "failed";
     pipelineState.lastError = code === 0 ? null : `Exited with code ${code}`;
     pipelineState.pid = null;
+    pushLog(
+      code === 0 ? "log" : "error",
+      code === 0
+        ? "Daily pipeline process completed successfully"
+        : `Daily pipeline process exited with code ${code}`,
+    );
   });
 
   return {
@@ -74,4 +97,3 @@ export const triggerDailyPipelineJob = () => {
     status: getDailyPipelineJobStatus(),
   };
 };
-
