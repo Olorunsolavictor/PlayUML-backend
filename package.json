@@ -15,7 +15,8 @@
     "rebalance:coins": "node src/scripts/rebalanceCoinsPercentile.js",
     "rebalance:coins:simple": "node src/scripts/rebalanceCoinsSimple.js",
     "reset:scoring": "node src/scripts/resetGameScoring.js",
-    "reset:game": "node src/scripts/resetGameState.js"
+    "reset:game": "node src/scripts/resetGameState.js",
+    "reset:all": "node src/scripts/resetAllData.js"
   },
   "keywords": [],
   "author": "",

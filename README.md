@@ -76,6 +76,7 @@ Swagger UI is available at:
 - `GET /leaderboard/season`
 - `GET /news?limit=20`
 - `GET /intel/me` (Bearer token)
+- `GET /admin/run-daily-pipeline?key=YOUR_ADMIN_API_KEY`
 
 ## Scripts
 - `npm run dev` - Start dev server with nodemon
@@ -89,6 +90,7 @@ Swagger UI is available at:
 - `npm run rebalance:coins:simple` - Rebalance coins (simple strategy)
 - `npm run reset:scoring` - Reset all team scoring totals and daily score history
 - `npm run reset:game` - Clear daily stats, intel cache, and score history while keeping users and team selections
+- `npm run reset:all` - Full fresh start: delete users, teams, scores, daily stats, banter, and intel cache
 
 ## Scoring (Current Phase)
 - `lastfmScore = (listenerDelta / LASTFM_LISTENERS_DIVISOR) + (playcountDelta / LASTFM_PLAYCOUNT_DIVISOR)`
@@ -127,7 +129,23 @@ Swagger UI is available at:
 - Suggested schedule: `15 1 * * *` UTC
 - This keeps ordering correct: snapshot -> coin rebalance -> sync today's coin values -> clear today's intel cache -> score teams
 
+## cron-job.org Setup
+- If your host does not provide cron on your plan, use `cron-job.org`.
+- Create a job that hits:
+  - `GET https://YOUR_BACKEND_DOMAIN/admin/run-daily-pipeline?key=YOUR_ADMIN_API_KEY`
+- Recommended schedule:
+  - `15 1 * * *` UTC
+- Optional status check:
+  - `GET https://YOUR_BACKEND_DOMAIN/admin/run-daily-pipeline/status?key=YOUR_ADMIN_API_KEY`
+
 ## Fresh Season Reset
 - If you want a clean restart without deleting users or drafted teams:
   1) `npm run reset:game`
   2) `npm run daily:pipeline`
+
+## Full Fresh Start
+- If you want a full restart from zero before launch:
+  1) `npm run reset:all`
+  2) create new users and draft new teams
+  3) `npm run daily:pipeline`
+  4) let Render cron take over with `npm run daily:pipeline`
