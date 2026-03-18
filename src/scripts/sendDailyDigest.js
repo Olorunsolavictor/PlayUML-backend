@@ -1,5 +1,7 @@
 import mongoose from "mongoose";
 import dotenv from "dotenv";
+import "../models/User.js";
+import "../models/Artiste.js";
 import Team from "../models/Team.js";
 import TeamDailyScore from "../models/TeamDailyScore.js";
 import UserDailyDigest from "../models/UserDailyDigest.js";
