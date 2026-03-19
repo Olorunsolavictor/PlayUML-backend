@@ -12,6 +12,40 @@ const getTodayAndYesterday = () => {
   return { today, yesterday };
 };
 
+const rankTeams = (teams, pointsSelector) => {
+  const sorted = [...teams].sort((a, b) => {
+    const pointDiff = Number(pointsSelector(b) || 0) - Number(pointsSelector(a) || 0);
+    if (pointDiff !== 0) return pointDiff;
+
+    const swapDiff =
+      Number(a.swapsUsedThisWeek || 0) - Number(b.swapsUsedThisWeek || 0);
+    if (swapDiff !== 0) return swapDiff;
+
+    const captainDiff =
+      Number(a.captainChangesUsedThisWeek || 0) -
+      Number(b.captainChangesUsedThisWeek || 0);
+    if (captainDiff !== 0) return captainDiff;
+
+    return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+  });
+
+  let previousPoints = null;
+  let currentRank = 0;
+
+  return sorted.map((team, index) => {
+    const points = Number(pointsSelector(team) || 0);
+    if (previousPoints === null || points !== previousPoints) {
+      currentRank = index + 1;
+      previousPoints = points;
+    }
+
+    return {
+      rank: currentRank,
+      ...team.toObject(),
+    };
+  });
+};
+
 const attachDailyMetrics = async (rankedTeams) => {
   if (!rankedTeams.length) return rankedTeams;
 
@@ -53,8 +87,6 @@ export const getWeeklyLeaderboard = async (req, res) => {
     const limit = Math.min(Number(req.query.limit) || 50, 200);
 
     const teams = await Team.find({})
-      .sort({ weeklyPoints: -1, updatedAt: -1 })
-      .limit(limit)
       .populate("userId", safeUserSelect)
       .populate(
         "captainId",
@@ -65,11 +97,7 @@ export const getWeeklyLeaderboard = async (req, res) => {
         "name imageUrl coinValue popularity followers spotifyId"
       );
 
-    // add ranking number
-    const ranked = teams.map((t, i) => ({
-      rank: i + 1,
-      ...t.toObject(),
-    }));
+    const ranked = rankTeams(teams, (team) => team.weeklyPoints).slice(0, limit);
     const withDailyMetrics = await attachDailyMetrics(ranked);
 
     res.json({
@@ -90,8 +118,6 @@ export const getSeasonLeaderboard = async (req, res) => {
     const limit = Math.min(Number(req.query.limit) || 50, 200);
 
     const teams = await Team.find({})
-      .sort({ seasonPoints: -1, updatedAt: -1 })
-      .limit(limit)
       .populate("userId", safeUserSelect)
       .populate(
         "captainId",
@@ -102,10 +128,7 @@ export const getSeasonLeaderboard = async (req, res) => {
         "name imageUrl coinValue popularity followers spotifyId",
       );
 
-    const ranked = teams.map((t, i) => ({
-      rank: i + 1,
-      ...t.toObject(),
-    }));
+    const ranked = rankTeams(teams, (team) => team.seasonPoints).slice(0, limit);
     const withDailyMetrics = await attachDailyMetrics(ranked);
 
     res.json({ teams: withDailyMetrics });
