@@ -12,6 +12,9 @@ const getTodayAndYesterday = () => {
   return { today, yesterday };
 };
 
+const serializeTeam = (team) =>
+  typeof team?.toObject === "function" ? team.toObject() : { ...team };
+
 const rankTeams = (teams, pointsSelector) => {
   const sorted = [...teams].sort((a, b) => {
     const pointDiff = Number(pointsSelector(b) || 0) - Number(pointsSelector(a) || 0);
@@ -41,7 +44,7 @@ const rankTeams = (teams, pointsSelector) => {
 
     return {
       rank: currentRank,
-      ...team.toObject(),
+      ...serializeTeam(team),
     };
   });
 };
@@ -81,6 +84,30 @@ const attachDailyMetrics = async (rankedTeams) => {
   });
 };
 
+const attachRankMovement = (teams, pointsSelector) => {
+  if (!teams.length) return teams;
+
+  const previousRanked = rankTeams(teams, (team) => {
+    const currentPoints = Number(pointsSelector(team) || 0);
+    return currentPoints - Number(team.todayScore || 0);
+  });
+
+  const previousRankById = new Map(
+    previousRanked.map((team) => [String(team._id), Number(team.rank || 0)]),
+  );
+
+  return teams.map((team) => {
+    const previousRank = Number(previousRankById.get(String(team._id)) || team.rank || 0);
+    const rank = Number(team.rank || 0);
+
+    return {
+      ...team,
+      previousRank,
+      rankDelta: previousRank - rank,
+    };
+  });
+};
+
 // GET /leaderboard/weekly
 export const getWeeklyLeaderboard = async (req, res) => {
   try {
@@ -97,12 +124,16 @@ export const getWeeklyLeaderboard = async (req, res) => {
         "name imageUrl coinValue popularity followers spotifyId"
       );
 
-    const ranked = rankTeams(teams, (team) => team.weeklyPoints).slice(0, limit);
+    const ranked = rankTeams(teams, (team) => team.weeklyPoints);
     const withDailyMetrics = await attachDailyMetrics(ranked);
+    const withRankMovement = attachRankMovement(
+      withDailyMetrics,
+      (team) => team.weeklyPoints,
+    ).slice(0, limit);
 
     res.json({
-      weekKey: withDailyMetrics?.[0]?.currentWeekKey || null,
-      teams: withDailyMetrics,
+      weekKey: withRankMovement?.[0]?.currentWeekKey || null,
+      teams: withRankMovement,
     });
 
   } catch (err) {
@@ -128,10 +159,14 @@ export const getSeasonLeaderboard = async (req, res) => {
         "name imageUrl coinValue popularity followers spotifyId",
       );
 
-    const ranked = rankTeams(teams, (team) => team.seasonPoints).slice(0, limit);
+    const ranked = rankTeams(teams, (team) => team.seasonPoints);
     const withDailyMetrics = await attachDailyMetrics(ranked);
+    const withRankMovement = attachRankMovement(
+      withDailyMetrics,
+      (team) => team.seasonPoints,
+    ).slice(0, limit);
 
-    res.json({ teams: withDailyMetrics });
+    res.json({ teams: withRankMovement });
   } catch (err) {
     console.error("getSeasonLeaderboard failed", err);
     res.status(500).json({ error: "Internal server error" });
