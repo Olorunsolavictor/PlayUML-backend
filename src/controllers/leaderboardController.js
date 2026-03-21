@@ -43,8 +43,8 @@ const rankTeams = (teams, pointsSelector) => {
     }
 
     return {
-      rank: currentRank,
       ...serializeTeam(team),
+      rank: currentRank,
     };
   });
 };
@@ -71,12 +71,16 @@ const attachDailyMetrics = async (rankedTeams) => {
 
   return rankedTeams.map((team) => {
     const teamId = String(team._id);
+    const hasTodayScore = scoreMap.has(`${teamId}:${today}`);
+    const hasYesterdayScore = scoreMap.has(`${teamId}:${yesterday}`);
     const todayScore = Number(scoreMap.get(`${teamId}:${today}`) || 0);
     const yesterdayScore = Number(scoreMap.get(`${teamId}:${yesterday}`) || 0);
     const dayChange = Number((todayScore - yesterdayScore).toFixed(2));
 
     return {
       ...team,
+      hasTodayScore,
+      hasYesterdayScore,
       todayScore,
       yesterdayScore,
       dayChange,
@@ -89,7 +93,12 @@ const attachRankMovement = (teams, pointsSelector) => {
 
   const previousRanked = rankTeams(teams, (team) => {
     const currentPoints = Number(pointsSelector(team) || 0);
-    return currentPoints - Number(team.todayScore || 0);
+    const latestAppliedScore = team.hasTodayScore
+      ? Number(team.todayScore || 0)
+      : team.hasYesterdayScore
+        ? Number(team.yesterdayScore || 0)
+        : 0;
+    return currentPoints - latestAppliedScore;
   });
 
   const previousRankById = new Map(
