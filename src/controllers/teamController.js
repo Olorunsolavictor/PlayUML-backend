@@ -31,6 +31,151 @@ const normalizeActionWeek = (team, weekKey) => {
   }
 };
 
+const createHttpError = (status, error) => {
+  const err = new Error(error);
+  err.status = status;
+  return err;
+};
+
+const populateTeamRoster = async (team) => {
+  await team.populate("artisteIds", ARTISTE_SAFE_SELECT);
+  await team.populate("captainId", ARTISTE_SAFE_SELECT);
+};
+
+const normalizeTransfers = (transfers) => {
+  if (!Array.isArray(transfers) || transfers.length === 0) {
+    throw createHttpError(400, "At least one transfer is required");
+  }
+
+  return transfers.map((transfer, index) => {
+    const outArtisteId = String(transfer?.outArtisteId || "");
+    const inArtisteId = String(transfer?.inArtisteId || "");
+
+    if (!outArtisteId || !inArtisteId) {
+      throw createHttpError(
+        400,
+        `Transfer ${index + 1} must include outArtisteId and inArtisteId`,
+      );
+    }
+
+    if (outArtisteId === inArtisteId) {
+      throw createHttpError(400, "Swap artiste IDs must differ");
+    }
+
+    return { outArtisteId, inArtisteId };
+  });
+};
+
+const buildTransferPlan = async (team, transfers) => {
+  const normalizedTransfers = normalizeTransfers(transfers);
+  const transferCount = normalizedTransfers.length;
+
+  if ((team.swapsUsedThisWeek || 0) + transferCount > MAX_WEEKLY_SWAPS) {
+    throw createHttpError(
+      409,
+      `Weekly swap limit reached (${MAX_WEEKLY_SWAPS})`,
+    );
+  }
+
+  const outIds = normalizedTransfers.map((transfer) => transfer.outArtisteId);
+  const inIds = normalizedTransfers.map((transfer) => transfer.inArtisteId);
+
+  if (new Set(outIds).size !== outIds.length) {
+    throw createHttpError(400, "Outgoing artistes must be unique");
+  }
+  if (new Set(inIds).size !== inIds.length) {
+    throw createHttpError(400, "Incoming artistes must be unique");
+  }
+
+  const currentTeamIds = team.artisteIds.map(String);
+  const currentTeamIdSet = new Set(currentTeamIds);
+
+  for (const outArtisteId of outIds) {
+    if (!currentTeamIdSet.has(outArtisteId)) {
+      throw createHttpError(400, "Outgoing artiste is not in your team");
+    }
+  }
+
+  for (const inArtisteId of inIds) {
+    if (currentTeamIdSet.has(inArtisteId)) {
+      throw createHttpError(400, "Incoming artiste is already in your team");
+    }
+  }
+
+  const artistes = await Artiste.find({
+    _id: { $in: [...new Set([...outIds, ...inIds])] },
+  }).select("coinValue isActive");
+
+  const artisteMap = new Map(artistes.map((artiste) => [String(artiste._id), artiste]));
+
+  for (const outArtisteId of outIds) {
+    if (!artisteMap.has(outArtisteId)) {
+      throw createHttpError(400, "Outgoing artiste not found");
+    }
+  }
+
+  for (const inArtisteId of inIds) {
+    const incoming = artisteMap.get(inArtisteId);
+    if (!incoming || !incoming.isActive) {
+      throw createHttpError(400, "Incoming artiste is invalid or inactive");
+    }
+  }
+
+  const finalArtisteIds = [...currentTeamIds];
+  for (const transfer of normalizedTransfers) {
+    const replaceIndex = finalArtisteIds.findIndex((id) => id === transfer.outArtisteId);
+    finalArtisteIds[replaceIndex] = transfer.inArtisteId;
+  }
+
+  if (new Set(finalArtisteIds).size !== MAX_TEAM) {
+    throw createHttpError(400, "Final team artistes must be unique");
+  }
+
+  const coinsReleased = outIds.reduce((sum, id) => {
+    const artiste = artisteMap.get(id);
+    return sum + Number(artiste?.coinValue || 0);
+  }, 0);
+
+  const coinsAdded = inIds.reduce((sum, id) => {
+    const artiste = artisteMap.get(id);
+    return sum + Number(artiste?.coinValue || 0);
+  }, 0);
+
+  const newCoinsUsed = Number(
+    ((team.coinsUsed || 0) - coinsReleased + coinsAdded).toFixed(2),
+  );
+
+  if (newCoinsUsed > MAX_COINS) {
+    throw createHttpError(
+      400,
+      `Coin limit exceeded (${newCoinsUsed}/${MAX_COINS})`,
+    );
+  }
+
+  const captainTransfer = normalizedTransfers.find(
+    (transfer) => transfer.outArtisteId === String(team.captainId),
+  );
+
+  return {
+    transferCount,
+    newCoinsUsed,
+    finalArtisteIds,
+    nextCaptainId: captainTransfer
+      ? captainTransfer.inArtisteId
+      : String(team.captainId),
+  };
+};
+
+const applyTransferPlan = async (team, plan) => {
+  team.artisteIds = plan.finalArtisteIds;
+  team.captainId = plan.nextCaptainId;
+  team.coinsUsed = plan.newCoinsUsed;
+  team.swapsUsedThisWeek = (team.swapsUsedThisWeek || 0) + plan.transferCount;
+  await team.save();
+  await populateTeamRoster(team);
+  return team;
+};
+
 // POST /teams
 export const createTeam = async (req, res) => {
   try {
@@ -204,60 +349,8 @@ export const swapArtiste = async (req, res) => {
     const team = await Team.findOne({ userId });
     if (!team) return res.status(404).json({ error: "No team found" });
     normalizeActionWeek(team, weekKey);
-
-    if ((team.swapsUsedThisWeek || 0) >= MAX_WEEKLY_SWAPS) {
-      return res
-        .status(409)
-        .json({ error: `Weekly swap limit reached (${MAX_WEEKLY_SWAPS})` });
-    }
-
-    const hasOut = team.artisteIds.some(
-      (id) => String(id) === String(outArtisteId),
-    );
-    if (!hasOut) {
-      return res.status(400).json({ error: "Outgoing artiste is not in your team" });
-    }
-    const hasIn = team.artisteIds.some((id) => String(id) === String(inArtisteId));
-    if (hasIn) {
-      return res
-        .status(400)
-        .json({ error: "Incoming artiste is already in your team" });
-    }
-
-    const [outArtiste, inArtiste] = await Promise.all([
-      Artiste.findById(outArtisteId).select("coinValue isActive"),
-      Artiste.findById(inArtisteId).select("coinValue isActive"),
-    ]);
-
-    if (!outArtiste) {
-      return res.status(400).json({ error: "Outgoing artiste not found" });
-    }
-    if (!inArtiste || !inArtiste.isActive) {
-      return res
-        .status(400)
-        .json({ error: "Incoming artiste is invalid or inactive" });
-    }
-
-    const newCoinsUsed =
-      (team.coinsUsed || 0) - (outArtiste.coinValue || 0) + (inArtiste.coinValue || 0);
-    if (newCoinsUsed > MAX_COINS) {
-      return res
-        .status(400)
-        .json({ error: `Coin limit exceeded (${newCoinsUsed}/${MAX_COINS})` });
-    }
-
-    team.artisteIds = team.artisteIds.map((id) =>
-      String(id) === String(outArtisteId) ? inArtisteId : id,
-    );
-    if (String(team.captainId) === String(outArtisteId)) {
-      team.captainId = inArtisteId;
-    }
-    team.coinsUsed = Number(newCoinsUsed.toFixed(2));
-    team.swapsUsedThisWeek = (team.swapsUsedThisWeek || 0) + 1;
-
-    await team.save();
-    await team.populate("artisteIds", ARTISTE_SAFE_SELECT);
-    await team.populate("captainId", ARTISTE_SAFE_SELECT);
+    const plan = await buildTransferPlan(team, [{ outArtisteId, inArtisteId }]);
+    await applyTransferPlan(team, plan);
 
     return res.json({
       message: "Artiste swapped ✅",
@@ -266,7 +359,35 @@ export const swapArtiste = async (req, res) => {
     });
   } catch (err) {
     console.error("swapArtiste failed", err);
-    return res.status(500).json({ error: "Internal server error" });
+    return res.status(err.status || 500).json({ error: err.message || "Internal server error" });
+  }
+};
+
+// PATCH /teams/me/transfers
+export const applyTransfers = async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    const { transfers } = req.body;
+    const weekKey = getISOWeekKeyUTC();
+
+    const team = await Team.findOne({ userId });
+    if (!team) return res.status(404).json({ error: "No team found" });
+    normalizeActionWeek(team, weekKey);
+
+    const plan = await buildTransferPlan(team, transfers);
+    await applyTransferPlan(team, plan);
+
+    return res.json({
+      message:
+        plan.transferCount === 1 ? "Transfer applied ✅" : `${plan.transferCount} transfers applied ✅`,
+      team,
+      transfersApplied: plan.transferCount,
+      coinsLeft: Number((MAX_COINS - team.coinsUsed).toFixed(2)),
+      remainingSwaps: Math.max(0, MAX_WEEKLY_SWAPS - (team.swapsUsedThisWeek || 0)),
+    });
+  } catch (err) {
+    console.error("applyTransfers failed", err);
+    return res.status(err.status || 500).json({ error: err.message || "Internal server error" });
   }
 };
 

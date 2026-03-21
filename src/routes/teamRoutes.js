@@ -1,6 +1,7 @@
 import express from "express";
 import { requireAuth } from "../middleware/auth.js";
 import {
+  applyTransfers,
   createTeam,
   getMyTeam,
   updateCaptain,
@@ -107,6 +108,7 @@ router.get("/me", requireAuth, getMyTeam);
  */
 router.patch("/me/captain", requireAuth, updateCaptain);
 router.patch("/me/swap", requireAuth, swapArtiste);
+router.patch("/me/transfers", requireAuth, applyTransfers);
 /**
  * @swagger
  * /teams/me/daily:
