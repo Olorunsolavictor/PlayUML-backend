@@ -117,6 +117,85 @@ const attachRankMovement = (teams, pointsSelector) => {
   });
 };
 
+const getCurrentWeekKeyUTC = (date = new Date()) => {
+  const tmp = new Date(
+    Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()),
+  );
+  const dayNum = tmp.getUTCDay() || 7;
+  tmp.setUTCDate(tmp.getUTCDate() + 4 - dayNum);
+  const yearStart = new Date(Date.UTC(tmp.getUTCFullYear(), 0, 1));
+  const weekNo = Math.ceil(((tmp - yearStart) / 86400000 + 1) / 7);
+  return `${tmp.getUTCFullYear()}-W${String(weekNo).padStart(2, "0")}`;
+};
+
+const attachWeeklyRankMovement = async (teams, pointsSelector) => {
+  if (!teams.length) return teams;
+
+  const currentWeekKey = getCurrentWeekKeyUTC();
+  const teamIds = teams.map((team) => team._id);
+
+  const scoreDays = await TeamDailyScore.aggregate([
+    {
+      $match: {
+        teamId: { $in: teamIds },
+        weekKey: currentWeekKey,
+      },
+    },
+    { $group: { _id: "$day" } },
+    { $sort: { _id: -1 } },
+    { $limit: 2 },
+  ]);
+
+  const latestDay = scoreDays[0]?._id || null;
+  const previousDay = scoreDays[1]?._id || null;
+
+  if (!latestDay || !previousDay) {
+    return teams.map((team) => ({
+      ...team,
+      previousRank: Number(team.rank || 0),
+      rankDelta: 0,
+    }));
+  }
+
+  const latestScores = await TeamDailyScore.find({
+    teamId: { $in: teamIds },
+    weekKey: currentWeekKey,
+    day: latestDay,
+  })
+    .select("teamId totalPoints")
+    .lean();
+
+  const latestScoreMap = new Map(
+    latestScores.map((score) => [
+      String(score.teamId),
+      Number(score.totalPoints || 0),
+    ]),
+  );
+
+  const previousRanked = rankTeams(teams, (team) => {
+    const currentPoints = Number(pointsSelector(team) || 0);
+    const latestAppliedScore = Number(latestScoreMap.get(String(team._id)) || 0);
+    return currentPoints - latestAppliedScore;
+  });
+
+  const previousRankById = new Map(
+    previousRanked.map((team) => [String(team._id), Number(team.rank || 0)]),
+  );
+
+  return teams.map((team) => {
+    const previousRank = Number(
+      previousRankById.get(String(team._id)) || team.rank || 0,
+    );
+    const rank = Number(team.rank || 0);
+
+    return {
+      ...team,
+      previousRank,
+      rankDelta: previousRank - rank,
+    };
+  });
+};
+
 // GET /leaderboard/weekly
 export const getWeeklyLeaderboard = async (req, res) => {
   try {
@@ -135,9 +214,11 @@ export const getWeeklyLeaderboard = async (req, res) => {
 
     const ranked = rankTeams(teams, (team) => team.weeklyPoints);
     const withDailyMetrics = await attachDailyMetrics(ranked);
-    const withRankMovement = attachRankMovement(
-      withDailyMetrics,
-      (team) => team.weeklyPoints,
+    const withRankMovement = (
+      await attachWeeklyRankMovement(
+        withDailyMetrics,
+        (team) => team.weeklyPoints,
+      )
     ).slice(0, limit);
 
     res.json({
