@@ -1,6 +1,7 @@
 import Team from "../models/Team.js";
 import Artiste from "../models/Artiste.js";
 import TeamDailyScore from "../models/TeamDailyScore.js";
+import { trackServerEvent } from "../services/analyticsService.js";
 
 const MAX_TEAM = 5;
 const MAX_COINS = 100;
@@ -235,6 +236,21 @@ export const createTeam = async (req, res) => {
       coinsUsed,
     });
 
+    void trackServerEvent({
+      event: "team_created",
+      userId,
+      category: "product",
+      surface: "api",
+      path: "/teams",
+      source: "backend",
+      properties: {
+        coins_used: Number(coinsUsed.toFixed(2)),
+        coins_left: Number((MAX_COINS - coinsUsed).toFixed(2)),
+        captain_id: String(captainId),
+        selected_count: artisteIds.length,
+      },
+    });
+
     return res.status(201).json({
       message: "Team created ✅",
       teamId: team._id,
@@ -316,6 +332,23 @@ export const updateCaptain = async (req, res) => {
     await team.populate("artisteIds", ARTISTE_SAFE_SELECT);
     await team.populate("captainId", ARTISTE_SAFE_SELECT);
 
+    void trackServerEvent({
+      event: "captain_changed",
+      userId,
+      category: "product",
+      surface: "api",
+      path: "/teams/me/captain",
+      source: "backend",
+      properties: {
+        captain_id: String(captainId),
+        remaining_captain_changes: Math.max(
+          0,
+          MAX_WEEKLY_CAPTAIN_CHANGES - (team.captainChangesUsedThisWeek || 0),
+        ),
+        week_key: weekKey,
+      },
+    });
+
     return res.json({
       message: "Captain updated ✅",
       team,
@@ -352,6 +385,27 @@ export const swapArtiste = async (req, res) => {
     const plan = await buildTransferPlan(team, [{ outArtisteId, inArtisteId }]);
     await applyTransferPlan(team, plan);
 
+    void trackServerEvent({
+      event: "transfers_applied",
+      userId,
+      category: "product",
+      surface: "api",
+      path: "/teams/me/swap",
+      source: "backend",
+      properties: {
+        transfer_count: 1,
+        out_artiste_id: String(outArtisteId),
+        in_artiste_id: String(inArtisteId),
+        coins_used: Number(team.coinsUsed || 0),
+        coins_left: Number((MAX_COINS - Number(team.coinsUsed || 0)).toFixed(2)),
+        remaining_swaps: Math.max(
+          0,
+          MAX_WEEKLY_SWAPS - (team.swapsUsedThisWeek || 0),
+        ),
+        week_key: weekKey,
+      },
+    });
+
     return res.json({
       message: "Artiste swapped ✅",
       team,
@@ -376,6 +430,25 @@ export const applyTransfers = async (req, res) => {
 
     const plan = await buildTransferPlan(team, transfers);
     await applyTransferPlan(team, plan);
+
+    void trackServerEvent({
+      event: "transfers_applied",
+      userId,
+      category: "product",
+      surface: "api",
+      path: "/teams/me/transfers",
+      source: "backend",
+      properties: {
+        transfer_count: plan.transferCount,
+        coins_used: Number(team.coinsUsed || 0),
+        coins_left: Number((MAX_COINS - Number(team.coinsUsed || 0)).toFixed(2)),
+        remaining_swaps: Math.max(
+          0,
+          MAX_WEEKLY_SWAPS - (team.swapsUsedThisWeek || 0),
+        ),
+        week_key: weekKey,
+      },
+    });
 
     return res.json({
       message:

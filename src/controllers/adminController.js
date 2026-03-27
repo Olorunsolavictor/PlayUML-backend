@@ -6,6 +6,7 @@ import {
   getDailyDigestJobStatus,
   triggerDailyDigestJob,
 } from "../services/dailyDigestJobService.js";
+import { buildAnalyticsSummary } from "../services/analyticsService.js";
 
 export const runDailyPipeline = async (req, res) => {
   try {
@@ -64,5 +65,17 @@ export const getDailyDigestStatus = async (req, res) => {
   } catch (error) {
     console.error("getDailyDigestStatus failed", error);
     return res.status(500).json({ error: "Failed to read daily digest status" });
+  }
+};
+
+export const getAnalyticsSummary = async (req, res) => {
+  try {
+    const summary = await buildAnalyticsSummary({
+      days: req.query.days,
+    });
+    return res.json(summary);
+  } catch (error) {
+    console.error("getAnalyticsSummary failed", error);
+    return res.status(500).json({ error: "Failed to load analytics summary" });
   }
 };
