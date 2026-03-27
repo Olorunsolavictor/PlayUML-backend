@@ -7,6 +7,7 @@ import {
   buildTemporaryPasswordEmail,
   buildVerificationEmail,
 } from "../utils/emailTemplates.js";
+import { trackServerEvent } from "../services/analyticsService.js";
 
 const createVerificationCode = () =>
   Math.floor(100000 + Math.random() * 900000).toString();
@@ -63,6 +64,19 @@ export const signup = async (req, res) => {
     });
 
     await user.save();
+
+    void trackServerEvent({
+      event: "signup_completed",
+      userId: user._id,
+      category: "product",
+      surface: "api",
+      path: "/auth/signup",
+      source: "backend",
+      properties: {
+        method: "email_password",
+        verified: false,
+      },
+    });
 
     const emailPayload = buildVerificationEmail({
       username,
@@ -199,6 +213,18 @@ export const verifyUser = async (req, res) => {
 
     await user.save();
 
+    void trackServerEvent({
+      event: "user_verified",
+      userId: user._id,
+      category: "product",
+      surface: "api",
+      path: "/auth/verify",
+      source: "backend",
+      properties: {
+        method: "verification_code",
+      },
+    });
+
     const token = jwt.sign(
       { userId: user._id },
       process.env.JWT_SECRET,
@@ -248,6 +274,18 @@ export const login = async (req, res) => {
       process.env.JWT_SECRET,
       { expiresIn: "1h" }
     );
+
+    void trackServerEvent({
+      event: "login_completed",
+      userId: user._id,
+      category: "product",
+      surface: "api",
+      path: "/auth/login",
+      source: "backend",
+      properties: {
+        method: "email_password",
+      },
+    });
 
     res.json({ message: "Logged in ", token });
 

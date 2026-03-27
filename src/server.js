@@ -17,6 +17,7 @@ import banterRoutes from "./routes/banterRoutes.js";
 import newsRoutes from "./routes/newsRoutes.js";
 import intelRoutes from "./routes/intelRoutes.js";
 import adminRoutes from "./routes/adminRoutes.js";
+import analyticsRoutes from "./routes/analyticsRoutes.js";
 import { requireAdminKey } from "./middleware/admin.js";
 import { setIO } from "./socket/io.js";
 import { registerBanterSocketHandlers } from "./socket/banterSocket.js";
@@ -146,6 +147,7 @@ app.use("/leaderboard", leaderboardRoutes);
 app.use("/banter", banterRoutes);
 app.use("/news", newsRoutes);
 app.use("/intel", intelRoutes);
+app.use("/analytics", analyticsRoutes);
 app.use("/admin", adminRoutes);
 
 server.listen(PORT, () => {

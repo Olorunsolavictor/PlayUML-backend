@@ -1,6 +1,7 @@
 // src/controllers/userController.js
 import User from "../models/User.js";
 import bcrypt from "bcrypt";
+import { resolveUserRole } from "../utils/userRole.js";
 
 // GET /users/me
 export const getMe = async (req, res) => {
@@ -9,11 +10,20 @@ export const getMe = async (req, res) => {
     if (!userId) return res.status(401).json({ error: "Unauthorized" });
 
     const user = await User.findById(userId).select(
-      "username email isVerified createdAt",
+      "username email isVerified createdAt role",
     );
     if (!user) return res.status(404).json({ error: "User not found" });
 
-    res.json({ user });
+    res.json({
+      user: {
+        _id: user._id,
+        username: user.username,
+        email: user.email,
+        isVerified: user.isVerified,
+        createdAt: user.createdAt,
+        role: resolveUserRole(user),
+      },
+    });
   } catch (err) {
     console.error("getMe failed", err);
     res.status(500).json({ error: "Internal server error" });
