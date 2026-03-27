@@ -3,6 +3,7 @@ import { requireAdminKey } from "../middleware/admin.js";
 import { requireAuth } from "../middleware/auth.js";
 import { requireAdminUser } from "../middleware/adminUser.js";
 import {
+  getAdminOverview,
   getDailyDigestStatus,
   getAnalyticsSummary,
   getDailyPipelineStatus,
@@ -20,6 +21,7 @@ router.get("/run-daily-pipeline/status", getDailyPipelineStatus);
 router.get("/send-daily-digest", sendDailyDigest);
 router.post("/send-daily-digest", sendDailyDigest);
 router.get("/send-daily-digest/status", getDailyDigestStatus);
+router.get("/overview", getAdminOverview);
 router.get("/analytics/summary", getAnalyticsSummary);
 
 export default router;
