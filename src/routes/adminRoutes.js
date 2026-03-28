@@ -13,14 +13,15 @@ import {
 
 const router = express.Router();
 
-router.use(requireAuth, requireAdminUser, requireAdminKey);
+// Machine-triggered cron routes must remain usable with only the shared admin key.
+router.get("/run-daily-pipeline", requireAdminKey, runDailyPipeline);
+router.post("/run-daily-pipeline", requireAdminKey, runDailyPipeline);
+router.get("/run-daily-pipeline/status", requireAdminKey, getDailyPipelineStatus);
+router.get("/send-daily-digest", requireAdminKey, sendDailyDigest);
+router.post("/send-daily-digest", requireAdminKey, sendDailyDigest);
+router.get("/send-daily-digest/status", requireAdminKey, getDailyDigestStatus);
 
-router.get("/run-daily-pipeline", runDailyPipeline);
-router.post("/run-daily-pipeline", runDailyPipeline);
-router.get("/run-daily-pipeline/status", getDailyPipelineStatus);
-router.get("/send-daily-digest", sendDailyDigest);
-router.post("/send-daily-digest", sendDailyDigest);
-router.get("/send-daily-digest/status", getDailyDigestStatus);
+router.use(requireAuth, requireAdminUser, requireAdminKey);
 router.get("/overview", getAdminOverview);
 router.get("/analytics/summary", getAnalyticsSummary);
 
