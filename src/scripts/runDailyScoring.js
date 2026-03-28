@@ -145,6 +145,7 @@ const run = async () => {
               lastCalculatedAt: today,
             },
           },
+          { timestamps: false },
         );
         updatedTeams++;
         continue;
@@ -255,6 +256,7 @@ const run = async () => {
             currentWeekKey: weekKey,
           },
         },
+        { timestamps: false },
       );
 
       updatedTeams++;
