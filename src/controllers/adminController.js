@@ -7,6 +7,7 @@ import {
   triggerDailyDigestJob,
 } from "../services/dailyDigestJobService.js";
 import { buildAnalyticsSummary } from "../services/analyticsService.js";
+import { buildAdminArtistePerformance } from "../services/adminArtistePerformanceService.js";
 import User from "../models/User.js";
 import Team from "../models/Team.js";
 import Artiste from "../models/Artiste.js";
@@ -219,5 +220,17 @@ export const getAdminOverview = async (req, res) => {
   } catch (error) {
     console.error("getAdminOverview failed", error);
     return res.status(500).json({ error: "Failed to load admin overview" });
+  }
+};
+
+export const getAdminArtistePerformance = async (req, res) => {
+  try {
+    const payload = await buildAdminArtistePerformance({
+      days: req.query.days,
+    });
+    return res.json(payload);
+  } catch (error) {
+    console.error("getAdminArtistePerformance failed", error);
+    return res.status(500).json({ error: "Failed to load artiste performance" });
   }
 };
