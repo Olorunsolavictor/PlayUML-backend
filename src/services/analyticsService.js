@@ -177,12 +177,134 @@ const getWindowStart = (days) => {
   return date;
 };
 
+const normalizeEventUser = (value) => {
+  if (!value) {
+    return {
+      userId: null,
+      username: null,
+      email: null,
+    };
+  }
+
+  if (typeof value === "string") {
+    return {
+      userId: value,
+      username: null,
+      email: null,
+    };
+  }
+
+  return {
+    userId: value._id ? String(value._id) : null,
+    username: value.username || null,
+    email: value.email || null,
+  };
+};
+
+const buildRecentActivity = (events) => {
+  const people = new Map();
+
+  for (const event of events) {
+    const user = normalizeEventUser(event.userId);
+    const actorKey = user.userId
+      ? `user:${user.userId}`
+      : event.anonymousId
+        ? `visitor:${event.anonymousId}`
+        : event.sessionId
+          ? `session:${event.sessionId}`
+          : null;
+
+    if (!actorKey) continue;
+
+    const actorType = user.userId ? "user" : "visitor";
+    const existing =
+      people.get(actorKey) ||
+      {
+        actorType,
+        userId: user.userId,
+        username: user.username,
+        email: user.email,
+        anonymousId: event.anonymousId || null,
+        lastSeenAt: null,
+        lastPath: null,
+        lastEvent: null,
+        source: event.source || null,
+        medium: event.medium || null,
+        campaign: event.campaign || null,
+        eventCount: 0,
+        pageViewCount: 0,
+        sessionIds: new Set(),
+        recentActions: [],
+      };
+
+    existing.eventCount += 1;
+    if (event.event === "page_viewed") {
+      existing.pageViewCount += 1;
+    }
+
+    if (event.sessionId) {
+      existing.sessionIds.add(event.sessionId);
+    }
+
+    if (!existing.lastSeenAt) {
+      existing.lastSeenAt = event.createdAt;
+      existing.lastPath = event.path || null;
+      existing.lastEvent = event.event || null;
+      existing.source = event.source || null;
+      existing.medium = event.medium || null;
+      existing.campaign = event.campaign || null;
+    }
+
+    if (existing.recentActions.length < 5) {
+      existing.recentActions.push({
+        event: event.event,
+        path: event.path || null,
+        at: event.createdAt,
+      });
+    }
+
+    if (!existing.username && user.username) {
+      existing.username = user.username;
+    }
+    if (!existing.email && user.email) {
+      existing.email = user.email;
+    }
+
+    people.set(actorKey, existing);
+  }
+
+  const rows = [...people.values()]
+    .map((item) => ({
+      actorType: item.actorType,
+      userId: item.userId,
+      username: item.username,
+      email: item.email,
+      anonymousId: item.anonymousId,
+      lastSeenAt: item.lastSeenAt,
+      lastPath: item.lastPath,
+      lastEvent: item.lastEvent,
+      source: item.source,
+      medium: item.medium,
+      campaign: item.campaign,
+      eventCount: item.eventCount,
+      pageViewCount: item.pageViewCount,
+      sessionCount: item.sessionIds.size,
+      recentActions: item.recentActions,
+    }))
+    .sort((a, b) => new Date(b.lastSeenAt).getTime() - new Date(a.lastSeenAt).getTime());
+
+  return {
+    signedInUsers: rows.filter((item) => item.actorType === "user").slice(0, 12),
+    visitors: rows.filter((item) => item.actorType === "visitor").slice(0, 12),
+  };
+};
+
 export const buildAnalyticsSummary = async ({ days = 7 }) => {
   const safeDays = Math.min(Math.max(Number(days) || 7, 1), 90);
   const start = getWindowStart(safeDays);
   const match = { createdAt: { $gte: start } };
 
-  const [totalsAgg, topEvents, topPaths, topReferrers, topCampaigns, byDay, recentEvents] =
+  const [totalsAgg, topEvents, topPaths, topReferrers, topCampaigns, byDay, recentActivityEvents] =
     await Promise.all([
       AnalyticsEvent.aggregate([
         { $match: match },
@@ -300,10 +422,11 @@ export const buildAnalyticsSummary = async ({ days = 7 }) => {
       ]),
       AnalyticsEvent.find(match)
         .sort({ createdAt: -1 })
-        .limit(20)
+        .limit(250)
         .select(
-          "event category surface userId anonymousId path source medium campaign createdAt properties",
+          "event category surface userId anonymousId sessionId path referrer source medium campaign createdAt properties",
         )
+        .populate("userId", "username email")
         .lean(),
     ]);
 
@@ -325,6 +448,8 @@ export const buildAnalyticsSummary = async ({ days = 7 }) => {
     acc[event] = row?.count || 0;
     return acc;
   }, {});
+
+  const recentPeople = buildRecentActivity(recentActivityEvents);
 
   return {
     periodDays: safeDays,
@@ -363,6 +488,15 @@ export const buildAnalyticsSummary = async ({ days = 7 }) => {
       teamsCreated: item.teamsCreated,
       transfersApplied: item.transfersApplied,
     })),
-    recentEvents,
+    recentEvents: recentActivityEvents.slice(0, 20).map((event) => {
+      const user = normalizeEventUser(event.userId);
+      return {
+        ...event,
+        userId: user.userId,
+        username: user.username,
+        email: user.email,
+      };
+    }),
+    recentPeople,
   };
 };
