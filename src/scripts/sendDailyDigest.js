@@ -92,6 +92,7 @@ const run = async () => {
 
     let sent = 0;
     let skipped = 0;
+    let failed = 0;
 
     for (let index = 0; index < teams.length; index += 1) {
       const team = teams[index];
@@ -135,24 +136,36 @@ const run = async () => {
       };
       const emailPayload = buildDailyDigestEmail(payload);
 
-      await sendEmailMessage({
-        to: user.email,
-        subject,
-        text: emailPayload.text,
-        html: emailPayload.html,
-      });
+      try {
+        await sendEmailMessage({
+          to: user.email,
+          subject,
+          text: emailPayload.text,
+          html: emailPayload.html,
+        });
 
-      await UserDailyDigest.create({
-        userId,
-        teamId: team._id,
-        day: todayKey,
-        subject,
-      });
+        await UserDailyDigest.create({
+          userId,
+          teamId: team._id,
+          day: todayKey,
+          subject,
+        });
 
-      sent += 1;
+        sent += 1;
+      } catch (sendError) {
+        failed += 1;
+        console.error(
+          `Daily digest send failed for user=${userId} email=${user.email}`,
+          sendError,
+        );
+      }
     }
 
-    console.log(`Daily digest complete ✅ sent=${sent} skipped=${skipped}`);
+    console.log(`Daily digest complete ✅ sent=${sent} skipped=${skipped} failed=${failed}`);
+    if (failed > 0 && sent === 0) {
+      throw new Error(`Daily digest failed for every attempted recipient (${failed})`);
+    }
+
     process.exit(0);
   } catch (error) {
     console.error("Daily digest failed ❌", error);

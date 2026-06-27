@@ -22,8 +22,12 @@ SPOTIFY_CLIENT_SECRET=your_spotify_client_secret
 YOUTUBE_API_KEY=your_youtube_data_api_key
 LASTFM_API_KEY=your_lastfm_api_key
 
-SENDGRID_API_KEY=your_sendgrid_api_key
+MAIL_PROVIDER=resend
+RESEND_API_KEY=your_resend_api_key
 FROM_EMAIL=your_verified_sender_email
+
+# optional fallback if MAIL_PROVIDER=sendgrid
+SENDGRID_API_KEY=your_sendgrid_api_key
 
 SCORE_MULTIPLIER=1
 ARTIST_DAILY_CAP=25
