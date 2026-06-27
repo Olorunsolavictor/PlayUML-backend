@@ -13,6 +13,25 @@ const createVerificationCode = () =>
   Math.floor(100000 + Math.random() * 900000).toString();
 const createTempPassword = () => crypto.randomBytes(6).toString("base64url");
 
+const sendVerificationCodeEmail = async ({ email, username, verificationCode }) => {
+  const emailPayload = buildVerificationEmail({
+    username,
+    verificationCode,
+  });
+
+  await sendEmailMessage({
+    to: email,
+    subject: "Verify Your PlayUML Account",
+    text: emailPayload.text,
+    html: emailPayload.html,
+  });
+};
+
+const mailUnavailable = (res) =>
+  res.status(503).json({
+    error: "Email delivery is temporarily unavailable. Please try again shortly.",
+  });
+
 // POST /auth/signup
 
 export const signup = async (req, res) => {
@@ -22,23 +41,27 @@ export const signup = async (req, res) => {
       return res.status(400).json({ error: "Missing required fields" });
     }
 
-    const existingUser = await User.findOne({ email });
+    const existingUser = await User.findOne({ email }).select(
+      "+verificationCode +verificationCodeExpires",
+    );
     if (existingUser) {
       if (!existingUser.isVerified) {
-        existingUser.verificationCode = createVerificationCode();
+        const verificationCode = createVerificationCode();
+
+        try {
+          await sendVerificationCodeEmail({
+            email,
+            username: existingUser.username,
+            verificationCode,
+          });
+        } catch (mailError) {
+          console.error("signup verification email failed", mailError);
+          return mailUnavailable(res);
+        }
+
+        existingUser.verificationCode = verificationCode;
         existingUser.verificationCodeExpires = Date.now() + 10 * 60 * 1000;
         await existingUser.save();
-
-        const emailPayload = buildVerificationEmail({
-          username: existingUser.username,
-          verificationCode: existingUser.verificationCode,
-        });
-        await sendEmailMessage({
-          to: email,
-          subject: "Verify Your PlayUML Account",
-          text: emailPayload.text,
-          html: emailPayload.html,
-        });
 
         return res.status(200).json({
           message: "Account exists but is not verified. A new verification code was sent.",
@@ -65,6 +88,18 @@ export const signup = async (req, res) => {
 
     await user.save();
 
+    try {
+      await sendVerificationCodeEmail({
+        email,
+        username,
+        verificationCode,
+      });
+    } catch (mailError) {
+      console.error("signup verification email failed", mailError);
+      await User.deleteOne({ _id: user._id, isVerified: false });
+      return mailUnavailable(res);
+    }
+
     void trackServerEvent({
       event: "signup_completed",
       userId: user._id,
@@ -76,17 +111,6 @@ export const signup = async (req, res) => {
         method: "email_password",
         verified: false,
       },
-    });
-
-    const emailPayload = buildVerificationEmail({
-      username,
-      verificationCode,
-    });
-    await sendEmailMessage({
-      to: email,
-      subject: "Verify Your PlayUML Account",
-      text: emailPayload.text,
-      html: emailPayload.html,
     });
 
     res.status(201).json({
@@ -117,20 +141,21 @@ export const resendVerificationCode = async (req, res) => {
       });
     }
 
-    user.verificationCode = createVerificationCode();
+    const verificationCode = createVerificationCode();
+    try {
+      await sendVerificationCodeEmail({
+        email,
+        username: user.username,
+        verificationCode,
+      });
+    } catch (mailError) {
+      console.error("resend verification email failed", mailError);
+      return mailUnavailable(res);
+    }
+
+    user.verificationCode = verificationCode;
     user.verificationCodeExpires = Date.now() + 10 * 60 * 1000;
     await user.save();
-
-    const emailPayload = buildVerificationEmail({
-      username: user.username,
-      verificationCode: user.verificationCode,
-    });
-    await sendEmailMessage({
-      to: email,
-      subject: "Verify Your PlayUML Account",
-      text: emailPayload.text,
-      html: emailPayload.html,
-    });
 
     return res.status(200).json({
       message: "If this account can be verified, a new code has been sent.",
@@ -162,19 +187,24 @@ export const forgotPassword = async (req, res) => {
 
     const tempPassword = createTempPassword();
     const salt = await bcrypt.genSalt(10);
-    user.password = await bcrypt.hash(tempPassword, salt);
-    await user.save();
-
     const emailPayload = buildTemporaryPasswordEmail({
       username: user.username,
       tempPassword,
     });
-    await sendEmailMessage({
-      to: email,
-      subject: "Your PlayUML Temporary Password",
-      text: emailPayload.text,
-      html: emailPayload.html,
-    });
+    try {
+      await sendEmailMessage({
+        to: email,
+        subject: "Your PlayUML Temporary Password",
+        text: emailPayload.text,
+        html: emailPayload.html,
+      });
+    } catch (mailError) {
+      console.error("temporary password email failed", mailError);
+      return mailUnavailable(res);
+    }
+
+    user.password = await bcrypt.hash(tempPassword, salt);
+    await user.save();
 
     return res.status(200).json(genericResponse);
   } catch (err) {
