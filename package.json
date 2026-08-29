@@ -10,6 +10,7 @@
     "seed:youtube": "node src/scripts/seedYoutubeChannels.js",
     "snapshot:daily": "node src/scripts/runDailySnapshot.js",
     "score:daily": "node src/scripts/runDailyScoring.js",
+    "audit:scoring": "node src/scripts/auditDailyScoring.js",
     "daily:pipeline": "node src/scripts/runDailyPipeline.js",
     "digest:daily": "node src/scripts/sendDailyDigest.js",
     "seed:afrobeats": "node src/scripts/seedAfrobeats100.js",
