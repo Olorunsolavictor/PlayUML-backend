@@ -108,6 +108,7 @@ const run = async () => {
 
     let updatedTeams = 0;
     let skippedAlreadyScored = 0;
+    let incompleteTeams = 0;
 
     for (const team of teams) {
       const artisteIds = (team.artisteIds || []).map(String);
@@ -135,19 +136,12 @@ const run = async () => {
       const todayMap = new Map(todayStats.map((s) => [String(s.artisteId), s]));
       const yestMap = new Map(yestStats.map((s) => [String(s.artisteId), s]));
 
-      // If yesterday stats missing (first day), mark team as processed and move on
-      if (yestMap.size === 0) {
-        await Team.updateOne(
-          { _id: team._id },
-          {
-            $set: {
-              currentWeekKey: weekKey,
-              lastCalculatedAt: today,
-            },
-          },
-          { timestamps: false },
-        );
-        updatedTeams++;
+      // A team must have a complete pair of snapshots before it can score. This
+      // avoids partial or fabricated totals when a provider or snapshot run fails.
+      const missingToday = artisteIds.filter((id) => !todayMap.has(id));
+      const missingYesterday = artisteIds.filter((id) => !yestMap.has(id));
+      if (missingToday.length > 0 || missingYesterday.length > 0) {
+        incompleteTeams++;
         continue;
       }
 
@@ -263,8 +257,16 @@ const run = async () => {
     }
 
     console.log(
-      `Daily scoring complete ✅ Updated ${updatedTeams} teams (skipped ${skippedAlreadyScored} already-scored)`,
+      `Daily scoring complete ✅ Updated ${updatedTeams} teams (skipped ${skippedAlreadyScored} already-scored, incomplete ${incompleteTeams})`,
     );
+
+    if (incompleteTeams > 0) {
+      console.error(
+        `Daily scoring blocked ❌ ${incompleteTeams} teams are missing a complete daily snapshot pair`,
+      );
+      process.exit(1);
+    }
+
     process.exit(0);
   } catch (err) {
     console.error("Daily scoring failed ❌", err);
