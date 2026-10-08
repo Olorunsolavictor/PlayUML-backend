@@ -11,6 +11,7 @@ import { buildAdminArtistePerformance } from "../services/adminArtistePerformanc
 import User from "../models/User.js";
 import Team from "../models/Team.js";
 import Artiste from "../models/Artiste.js";
+import JobRun from "../models/JobRun.js";
 
 export const runDailyPipeline = async (req, res) => {
   try {
@@ -35,7 +36,11 @@ export const runDailyPipeline = async (req, res) => {
 
 export const getDailyPipelineStatus = async (req, res) => {
   try {
-    return res.json(getDailyPipelineJobStatus());
+    const [runtime, lastPersistentRun] = await Promise.all([
+      Promise.resolve(getDailyPipelineJobStatus()),
+      JobRun.findOne({ jobName: "daily-pipeline" }).sort({ startedAt: -1 }).lean(),
+    ]);
+    return res.json({ ...runtime, lastPersistentRun });
   } catch (error) {
     console.error("getDailyPipelineStatus failed", error);
     return res.status(500).json({ error: "Failed to read daily pipeline status" });
