@@ -1,0 +1,39 @@
+services:
+  - type: cron
+    name: playuml-daily-pipeline
+    runtime: node
+    branch: main
+    region: oregon
+    schedule: "15 1 * * *"
+    buildCommand: npm ci
+    startCommand: npm run daily:pipeline
+    autoDeployTrigger: commit
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: MONGO_URI
+        sync: false
+      - key: SPOTIFY_CLIENT_ID
+        sync: false
+      - key: SPOTIFY_CLIENT_SECRET
+        sync: false
+      - key: YOUTUBE_API_KEY
+        sync: false
+      - key: LASTFM_API_KEY
+        sync: false
+      - key: SCORE_MULTIPLIER
+        sync: false
+      - key: ARTIST_DAILY_CAP
+        sync: false
+      - key: YOUTUBE_SUBSCRIBER_DIVISOR
+        sync: false
+      - key: YOUTUBE_VIEWS_DIVISOR
+        sync: false
+      - key: LASTFM_LISTENERS_DIVISOR
+        sync: false
+      - key: LASTFM_PLAYCOUNT_DIVISOR
+        sync: false
+      - key: LASTFM_WEIGHT
+        sync: false
+      - key: YOUTUBE_WEIGHT
+        sync: false

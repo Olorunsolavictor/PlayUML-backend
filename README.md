@@ -134,6 +134,10 @@ Swagger UI is available at:
 - Command: `npm run daily:pipeline`
 - Suggested schedule: `15 1 * * *` UTC
 - This keeps ordering correct: snapshot -> coin rebalance -> sync today's coin values -> clear today's intel cache -> score teams
+- `render.yaml` defines this cron without the digest job. Connect it as a Render Blueprint after the deployment branch contains the file.
+- Enter the cron's secret/config values in Render when the Blueprint first connects. Copy the matching values from the existing backend service; never commit them.
+- Disable the equivalent cron-job.org job only after one manual Render run succeeds and its persistent `JobRun` status is `succeeded`.
+- Do not run both schedulers: duplicate invocations can race even though scoring itself is idempotent.
 
 ## cron-job.org Setup
 - If your host does not provide cron on your plan, use `cron-job.org`.
